@@ -209,6 +209,17 @@ code {
   outline: none;
 }
 
+.select-wrap select {
+  appearance: none;
+  color-scheme: dark;
+  background-color: #2a2b33;
+}
+
+.select-wrap select option {
+  background: #1f2027;
+  color: #f6efe5;
+}
+
 .text-input {
   flex: 1 1 500px;
   min-width: 260px;
