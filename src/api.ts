@@ -7,6 +7,8 @@ import {
   OpenFolderRequest,
   OpenFolderResponse,
   PickFolderResponse,
+  PlayVideoRequest,
+  PlayVideoResponse,
   ScanFolderRequest,
   ScanFolderResponse,
 } from "../shared/types";
@@ -47,6 +49,13 @@ export function scanFolder(body: ScanFolderRequest): Promise<ScanFolderResponse>
 
 export function fetchLogs(): Promise<LogsResponse> {
   return request("/api/logs");
+}
+
+export function playVideo(body: PlayVideoRequest): Promise<PlayVideoResponse> {
+  return request("/api/play-video", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function matchVideo(body: MatchVideoRequest): Promise<MatchVideoResponse> {

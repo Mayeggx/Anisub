@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { downloadCandidate, fetchLogs, matchVideo, openFolder, pickFolder, scanFolder } from "./api";
+import { downloadCandidate, fetchLogs, matchVideo, openFolder, pickFolder, playVideo, scanFolder } from "./api";
 import type {
   MatchLogItem,
   MatchMode,
@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
   folderPath: "anisub.folderPath",
   source: "anisub.source",
   mode: "anisub.mode",
+  playerPath: "anisub.playerPath",
 };
 
 type CandidateDialogState = {
@@ -30,9 +31,11 @@ export function App() {
   const [mode, setMode] = useState<MatchMode>(
     () => (localStorage.getItem(STORAGE_KEYS.mode) as MatchMode | null) ?? "auto",
   );
+  const [playerPath, setPlayerPath] = useState(() => localStorage.getItem(STORAGE_KEYS.playerPath) ?? "");
   const [candidateDialog, setCandidateDialog] = useState<CandidateDialogState>(null);
   const [loading, setLoading] = useState(false);
   const [matchingPath, setMatchingPath] = useState<string | null>(null);
+  const [playingPath, setPlayingPath] = useState<string | null>(null);
   const [message, setMessage] = useState("请选择一个本地视频文件夹。");
   const [showLogs, setShowLogs] = useState(false);
 
@@ -47,6 +50,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.mode, mode);
   }, [mode]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.playerPath, playerPath);
+  }, [playerPath]);
 
   useEffect(() => {
     if (!folderPath) {
@@ -118,6 +125,28 @@ export function App() {
       setMessage(`已在资源管理器中打开 ${targetPath}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "打开文件夹失败。");
+    }
+  }
+
+  async function handlePlayVideo(video: VideoItem) {
+    const targetPlayerPath = playerPath.trim();
+    if (!targetPlayerPath) {
+      setMessage("请先设置本地播放器路径。");
+      return;
+    }
+
+    try {
+      setPlayingPath(video.fullPath);
+      setMessage(`正在使用本地播放器打开 ${video.fileName} ...`);
+      await playVideo({
+        videoPath: video.fullPath,
+        playerPath: targetPlayerPath,
+      });
+      setMessage(`已使用 ${targetPlayerPath} 播放 ${video.fileName}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "播放失败。");
+    } finally {
+      setPlayingPath(null);
     }
   }
 
@@ -233,6 +262,17 @@ export function App() {
             </label>
           </div>
 
+          <label className="field-label player-field" htmlFor="playerPath">
+            本地播放器路径
+          </label>
+          <input
+            id="playerPath"
+            className="text-input"
+            value={playerPath}
+            onChange={(event) => setPlayerPath(event.target.value)}
+            placeholder="例如 D:\\Software\\mpv\\mpv.exe"
+          />
+
           <p className="status-banner">{message}</p>
         </section>
 
@@ -248,6 +288,7 @@ export function App() {
             <div className="video-list">
               {videos.map((video) => {
                 const busy = matchingPath === video.fullPath;
+                const playing = playingPath === video.fullPath;
                 return (
                   <article className="video-card" key={video.fullPath}>
                     <div className="video-meta">
@@ -263,6 +304,14 @@ export function App() {
                     </div>
 
                     <div className="video-actions">
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => void handlePlayVideo(video)}
+                        disabled={playing}
+                      >
+                        {playing ? "播放中..." : "播放"}
+                      </button>
                       <button
                         className="action-button"
                         type="button"

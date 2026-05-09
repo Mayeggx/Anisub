@@ -5,13 +5,13 @@ import { AppError } from "./errors";
 
 export async function pickFolder(): Promise<string> {
   if (process.platform !== "win32") {
-    throw new AppError("当前仅支持在 Windows 上使用本地目录选择器。", 400);
+    throw new AppError("Folder picker is only supported on Windows.", 400);
   }
 
   const script = [
     "Add-Type -AssemblyName System.Windows.Forms",
     "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
-    '$dialog.Description = "选择视频所在文件夹"',
+    '$dialog.Description = "Select the video folder"',
     "$dialog.ShowNewFolderButton = $false",
     "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {",
     "  Write-Output $dialog.SelectedPath",
@@ -21,14 +21,14 @@ export async function pickFolder(): Promise<string> {
   const output = await runPowerShell(script);
   const folderPath = output.trim();
   if (!folderPath) {
-    throw new AppError("已取消选择文件夹。", 400);
+    throw new AppError("Folder selection was cancelled.", 400);
   }
   return folderPath;
 }
 
 export async function openFolderInExplorer(targetPath: string): Promise<string> {
   if (process.platform !== "win32") {
-    throw new AppError("当前仅支持在 Windows 中打开文件夹。", 400);
+    throw new AppError("Opening folders is only supported on Windows.", 400);
   }
 
   const resolvedPath = path.resolve(targetPath);
@@ -43,12 +43,39 @@ export async function openFolderInExplorer(targetPath: string): Promise<string> 
     await runPowerShell(script);
   } catch (error) {
     if (error instanceof AppError && error.status === 500) {
-      throw new AppError("打开文件夹失败，请确认路径存在。", 400);
+      throw new AppError("Failed to open folder. Please confirm the path exists.", 400);
     }
     throw error;
   }
 
   return resolvedPath;
+}
+
+export async function openVideoInPlayer(playerPath: string, videoPath: string): Promise<void> {
+  if (process.platform !== "win32") {
+    throw new AppError("Launching a local player is only supported on Windows.", 400);
+  }
+
+  const resolvedPlayerPath = path.resolve(playerPath);
+  const resolvedVideoPath = path.resolve(videoPath);
+  const script = [
+    `if (-not (Test-Path -LiteralPath '${escapePowerShell(resolvedPlayerPath)}' -PathType Leaf)) {`,
+    "  exit 2",
+    "}",
+    `if (-not (Test-Path -LiteralPath '${escapePowerShell(resolvedVideoPath)}' -PathType Leaf)) {`,
+    "  exit 3",
+    "}",
+    `Start-Process -FilePath '${escapePowerShell(resolvedPlayerPath)}' -ArgumentList @('${escapePowerShell(resolvedVideoPath)}')`,
+  ].join("; ");
+
+  try {
+    await runPowerShell(script);
+  } catch (error) {
+    if (error instanceof AppError && error.status === 500) {
+      throw new AppError("Failed to launch player. Please confirm both paths exist.", 400);
+    }
+    throw error;
+  }
 }
 
 function runPowerShell(script: string): Promise<string> {
@@ -69,7 +96,7 @@ function runPowerShell(script: string): Promise<string> {
     child.on("error", reject);
     child.on("close", (code) => {
       if (code !== 0) {
-        reject(new AppError(stderr.trim() || `PowerShell 执行失败，退出码 ${code}。`, 500));
+        reject(new AppError(stderr.trim() || `PowerShell execution failed with exit code ${code}.`, 500));
         return;
       }
       resolve(stdout);

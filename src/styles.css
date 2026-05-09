@@ -199,6 +199,10 @@ code {
   flex-wrap: wrap;
 }
 
+.player-field {
+  margin-top: 16px;
+}
+
 .text-input,
 .select-wrap select {
   background: rgba(255, 255, 255, 0.06);
@@ -309,6 +313,10 @@ code {
 .video-card {
   display: grid;
   gap: 12px;
+}
+
+.video-actions {
+  flex-wrap: wrap;
 }
 
 .video-meta h3 {

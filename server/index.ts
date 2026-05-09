@@ -12,6 +12,8 @@ import {
   OpenFolderRequest,
   OpenFolderResponse,
   PickFolderResponse,
+  PlayVideoRequest,
+  PlayVideoResponse,
   ScanFolderRequest,
   ScanFolderResponse,
   SubtitleSource,
@@ -22,7 +24,7 @@ import { EdatribeSubtitleMatcher } from "./matchers/edatribe";
 import { JimakuSubtitleMatcher } from "./matchers/jimaku";
 import { DesktopVideoContext, SubtitleMatcher } from "./subtitle-matcher";
 import { getVideoByPath, scanVideoFolder } from "./video-library";
-import { openFolderInExplorer, pickFolder } from "./windows-picker";
+import { openFolderInExplorer, openVideoInPlayer, pickFolder } from "./windows-picker";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
@@ -52,7 +54,7 @@ app.post("/api/open-folder", async (request, response, next) => {
   try {
     const body = request.body as OpenFolderRequest;
     if (!body?.folderPath) {
-      throw new AppError("请提供文件夹路径。", 400);
+      throw new AppError("Missing folder path.", 400);
     }
     const openedPath = await openFolderInExplorer(body.folderPath);
     const payload: OpenFolderResponse = { openedPath };
@@ -66,7 +68,7 @@ app.post("/api/scan-folder", async (request, response, next) => {
   try {
     const body = request.body as ScanFolderRequest;
     if (!body?.folderPath) {
-      throw new AppError("请提供文件夹路径。");
+      throw new AppError("Missing folder path.", 400);
     }
     const videos = await scanVideoFolder(body.folderPath);
     const payload: ScanFolderResponse = {
@@ -90,11 +92,31 @@ app.get("/api/logs", async (_request, response, next) => {
   }
 });
 
+app.post("/api/play-video", async (request, response, next) => {
+  try {
+    const body = request.body as PlayVideoRequest;
+    if (!body?.videoPath) {
+      throw new AppError("Missing video path.", 400);
+    }
+    if (!body?.playerPath) {
+      throw new AppError("Missing player path.", 400);
+    }
+    await openVideoInPlayer(body.playerPath, body.videoPath);
+    const payload: PlayVideoResponse = {
+      videoPath: path.resolve(body.videoPath),
+      playerPath: path.resolve(body.playerPath),
+    };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/match-video", async (request, response, next) => {
   try {
     const body = request.body as MatchVideoRequest;
     if (!body?.videoPath) {
-      throw new AppError("请提供视频路径。");
+      throw new AppError("Missing video path.", 400);
     }
     const matcher = requireMatcher(body.source);
     const video = await getVideoByPath(body.videoPath);
@@ -132,7 +154,7 @@ app.post("/api/download-candidate", async (request, response, next) => {
   try {
     const body = request.body as DownloadCandidateRequest;
     if (!body?.videoPath) {
-      throw new AppError("请提供视频路径。");
+      throw new AppError("Missing video path.", 400);
     }
     const matcher = requireMatcher(body.source);
     const video = await getVideoByPath(body.videoPath);
@@ -167,7 +189,7 @@ app.listen(port, () => {
 function requireMatcher(source: SubtitleSource): SubtitleMatcher {
   const matcher = matchers.get(source);
   if (!matcher) {
-    throw new AppError("不支持的字幕来源。");
+    throw new AppError("Unsupported subtitle source.", 400);
   }
   return matcher;
 }

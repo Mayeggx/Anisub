@@ -97,3 +97,13 @@ export interface OpenFolderRequest {
 export interface OpenFolderResponse {
   openedPath: string;
 }
+
+export interface PlayVideoRequest {
+  videoPath: string;
+  playerPath: string;
+}
+
+export interface PlayVideoResponse {
+  videoPath: string;
+  playerPath: string;
+}
