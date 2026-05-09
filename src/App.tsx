@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { downloadCandidate, fetchLogs, matchVideo, pickFolder, scanFolder } from "./api";
+import { downloadCandidate, fetchLogs, matchVideo, openFolder, pickFolder, scanFolder } from "./api";
 import type {
   MatchLogItem,
   MatchMode,
@@ -106,6 +106,21 @@ export function App() {
     }
   }
 
+  async function handleOpenFolder() {
+    const targetPath = folderPath.trim();
+    if (!targetPath) {
+      setMessage("请先输入或选择一个文件夹路径。");
+      return;
+    }
+
+    try {
+      await openFolder({ folderPath: targetPath });
+      setMessage(`已在资源管理器中打开 ${targetPath}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "打开文件夹失败。");
+    }
+  }
+
   async function handleMatchVideo(video: VideoItem) {
     try {
       setMatchingPath(video.fullPath);
@@ -170,6 +185,9 @@ export function App() {
           <div className="section-title-row">
             <h2>工作区</h2>
             <div className="section-actions">
+              <button className="ghost-button" type="button" onClick={() => void handleOpenFolder()}>
+                打开文件夹
+              </button>
               <button className="ghost-button" type="button" onClick={() => setShowLogs(true)}>
                 查看日志
               </button>

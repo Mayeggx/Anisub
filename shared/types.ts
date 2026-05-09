@@ -89,3 +89,11 @@ export interface LogsResponse {
 export interface PickFolderResponse {
   folderPath: string;
 }
+
+export interface OpenFolderRequest {
+  folderPath: string;
+}
+
+export interface OpenFolderResponse {
+  openedPath: string;
+}

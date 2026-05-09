@@ -9,6 +9,8 @@ import {
   MatchLogItem,
   MatchVideoRequest,
   MatchVideoResponse,
+  OpenFolderRequest,
+  OpenFolderResponse,
   PickFolderResponse,
   ScanFolderRequest,
   ScanFolderResponse,
@@ -20,7 +22,7 @@ import { EdatribeSubtitleMatcher } from "./matchers/edatribe";
 import { JimakuSubtitleMatcher } from "./matchers/jimaku";
 import { DesktopVideoContext, SubtitleMatcher } from "./subtitle-matcher";
 import { getVideoByPath, scanVideoFolder } from "./video-library";
-import { pickFolder } from "./windows-picker";
+import { openFolderInExplorer, pickFolder } from "./windows-picker";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
@@ -40,6 +42,20 @@ app.post("/api/pick-folder", async (_request, response, next) => {
   try {
     const folderPath = await pickFolder();
     const payload: PickFolderResponse = { folderPath };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/open-folder", async (request, response, next) => {
+  try {
+    const body = request.body as OpenFolderRequest;
+    if (!body?.folderPath) {
+      throw new AppError("请提供文件夹路径。", 400);
+    }
+    const openedPath = await openFolderInExplorer(body.folderPath);
+    const payload: OpenFolderResponse = { openedPath };
     response.json(payload);
   } catch (error) {
     next(error);

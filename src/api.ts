@@ -4,6 +4,8 @@ import {
   LogsResponse,
   MatchVideoRequest,
   MatchVideoResponse,
+  OpenFolderRequest,
+  OpenFolderResponse,
   PickFolderResponse,
   ScanFolderRequest,
   ScanFolderResponse,
@@ -27,6 +29,13 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function pickFolder(): Promise<PickFolderResponse> {
   return request("/api/pick-folder", { method: "POST" });
+}
+
+export function openFolder(body: OpenFolderRequest): Promise<OpenFolderResponse> {
+  return request("/api/open-folder", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function scanFolder(body: ScanFolderRequest): Promise<ScanFolderResponse> {
