@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { downloadCandidate, fetchLogs, matchVideo, pickFolder, scanFolder } from "./api";
 import type {
@@ -54,15 +54,6 @@ export function App() {
     }
     void handleScan(folderPath, false);
   }, []);
-
-  const stats = useMemo(() => {
-    const matched = videos.filter((item) => item.hasSubtitle).length;
-    return {
-      total: videos.length,
-      matched,
-      pending: videos.length - matched,
-    };
-  }, [videos]);
 
   async function refreshLogs() {
     try {
@@ -170,37 +161,22 @@ export function App() {
 
   return (
     <div className="shell">
-      <header className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Anisub Desktop</p>
-          <h1>本地扫描视频，直接在电脑端匹配并保存字幕</h1>
-          <p className="hero-text">
-            复用 Anisubroid 的启发式匹配思路，用 TypeScript 实现 Jimaku / EdaTribe 两种来源，并通过本地网页完成交互。
-          </p>
-        </div>
-        <div className="hero-panel">
-          <div className="stat-chip">
-            <span>视频</span>
-            <strong>{stats.total}</strong>
-          </div>
-          <div className="stat-chip">
-            <span>已带字幕</span>
-            <strong>{stats.matched}</strong>
-          </div>
-          <div className="stat-chip">
-            <span>待处理</span>
-            <strong>{stats.pending}</strong>
-          </div>
-        </div>
+      <header className="hero hero-compact">
+        <p className="eyebrow">Anisub Desktop</p>
       </header>
 
       <main className="layout">
         <section className="control-card">
           <div className="section-title-row">
             <h2>工作区</h2>
-            <button className="ghost-button" type="button" onClick={() => void refreshLogs()}>
-              刷新日志
-            </button>
+            <div className="section-actions">
+              <button className="ghost-button" type="button" onClick={() => setShowLogs(true)}>
+                查看日志
+              </button>
+              <button className="ghost-button" type="button" onClick={() => void refreshLogs()}>
+                刷新日志
+              </button>
+            </div>
           </div>
 
           <label className="field-label" htmlFor="folderPath">
@@ -237,9 +213,6 @@ export function App() {
                 <option value="candidate">候选确认</option>
               </select>
             </label>
-            <button className="ghost-button" type="button" onClick={() => setShowLogs(true)}>
-              查看日志
-            </button>
           </div>
 
           <p className="status-banner">{message}</p>
