@@ -35,6 +35,7 @@ const STORAGE_KEYS = {
   folderPath: "anisub.folderPath",
   source: "anisub.source",
   mode: "anisub.mode",
+  matchTag: "anisub.matchTag",
   playerPath: "anisub.playerPath",
   activeFeature: "anisub.activeFeature",
   wordImageFolderPath: "anisub.wordNote.imageFolderPath",
@@ -59,6 +60,7 @@ export function App() {
   const [mode, setMode] = useState<MatchMode>(
     () => (localStorage.getItem(STORAGE_KEYS.mode) as MatchMode | null) ?? "auto",
   );
+  const [matchTag, setMatchTag] = useState(() => localStorage.getItem(STORAGE_KEYS.matchTag) ?? "");
   const [playerPath, setPlayerPath] = useState(() => localStorage.getItem(STORAGE_KEYS.playerPath) ?? "");
   const [candidateDialog, setCandidateDialog] = useState<CandidateDialogState>(null);
   const [loading, setLoading] = useState(false);
@@ -108,6 +110,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.mode, mode);
   }, [mode]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.matchTag, matchTag);
+  }, [matchTag]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.playerPath, playerPath);
@@ -293,6 +299,7 @@ export function App() {
         videoPath: video.fullPath,
         source,
         mode,
+        matchTag: matchTag.trim() || undefined,
       });
 
       if (payload.kind === "candidates") {
@@ -354,6 +361,7 @@ export function App() {
             videoPath: video.fullPath,
             source,
             mode: "auto",
+            matchTag: matchTag.trim() || undefined,
           });
           if (payload.kind === "downloaded") {
             mergeVideo(payload.video);
@@ -694,6 +702,15 @@ export function App() {
                     value={subtitleOffsetMsInput}
                     onChange={(event) => setSubtitleOffsetMsInput(event.target.value)}
                     placeholder="例如 -1200"
+                  />
+                </label>
+                <label className="compact-offset-field">
+                  <span>匹配标记</span>
+                  <input
+                    className="text-input"
+                    value={matchTag}
+                    onChange={(event) => setMatchTag(event.target.value)}
+                    placeholder="例如 [1080p]"
                   />
                 </label>
               </div>

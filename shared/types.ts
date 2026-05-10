@@ -69,6 +69,7 @@ export interface MatchVideoRequest {
   videoPath: string;
   source: SubtitleSource;
   mode: MatchMode;
+  matchTag?: string;
 }
 
 export interface MatchVideoDownloadedResponse {

@@ -182,7 +182,7 @@ app.post("/api/match-video", async (request, response, next) => {
     }
     const matcher = requireMatcher(body.source);
     const video = await getVideoByPath(body.videoPath);
-    const context = toDesktopVideoContext(video);
+    const context = toDesktopVideoContext(video, body.matchTag);
 
     if (body.mode === "candidate") {
       const candidates = await matcher.findCandidates(context);
@@ -350,9 +350,12 @@ function requireMatcher(source: SubtitleSource): SubtitleMatcher {
   return matcher;
 }
 
-function toDesktopVideoContext(video: Awaited<ReturnType<typeof getVideoByPath>>): DesktopVideoContext {
+function toDesktopVideoContext(video: Awaited<ReturnType<typeof getVideoByPath>>, matchTag?: string): DesktopVideoContext {
+  const normalizedTag = (matchTag ?? "").trim();
+  const parsed = path.parse(video.fileName);
+  const fileName = normalizedTag ? `${parsed.name}${normalizedTag}${parsed.ext}` : video.fileName;
   return {
-    fileName: video.fileName,
+    fileName,
     fullPath: video.fullPath,
     folderPath: video.folderPath,
   };
