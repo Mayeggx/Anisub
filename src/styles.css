@@ -146,6 +146,13 @@ code {
   margin-bottom: 14px;
 }
 
+.section-title-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .section-actions {
   display: flex;
   align-items: center;
@@ -183,6 +190,11 @@ code {
 
 .toolbar {
   margin-top: 16px;
+}
+
+.toolbar-top {
+  margin-top: 0;
+  margin-bottom: 16px;
 }
 
 .player-field {
@@ -599,6 +611,10 @@ code {
   .candidate-card,
   .log-line {
     align-items: flex-start;
+  }
+
+  .section-title-main {
+    width: 100%;
   }
 
   .section-actions {

@@ -8,6 +8,8 @@ import {
   LogsResponse,
   MatchVideoRequest,
   MatchVideoResponse,
+  OffsetSubtitleRequest,
+  OffsetSubtitleResponse,
   OpenConfigFileResponse,
   OpenWordNoteLogResponse,
   OpenFolderRequest,
@@ -78,6 +80,13 @@ export function downloadCandidate(
   body: DownloadCandidateRequest,
 ): Promise<DownloadCandidateResponse> {
   return request("/api/download-candidate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function offsetSubtitle(body: OffsetSubtitleRequest): Promise<OffsetSubtitleResponse> {
+  return request("/api/offset-subtitle", {
     method: "POST",
     body: JSON.stringify(body),
   });

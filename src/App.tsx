@@ -6,6 +6,7 @@ import {
   fetchLogs,
   fetchWordNoteConfig,
   matchVideo,
+  offsetSubtitle,
   openFolder,
   openWordNoteLog,
   openWordNoteConfig,
@@ -65,6 +66,10 @@ export function App() {
   const [playingPath, setPlayingPath] = useState<string | null>(null);
   const [message, setMessage] = useState("请选择本地视频文件夹。");
   const [showLogs, setShowLogs] = useState(false);
+  const [batchMatching, setBatchMatching] = useState(false);
+  const [subtitleOffsetMsInput, setSubtitleOffsetMsInput] = useState("0");
+  const [offsettingPath, setOffsettingPath] = useState<string | null>(null);
+  const [batchOffsetting, setBatchOffsetting] = useState(false);
 
   const [wordImageFolderPath, setWordImageFolderPath] = useState(
     () => localStorage.getItem(STORAGE_KEYS.wordImageFolderPath) ?? "",
@@ -84,6 +89,8 @@ export function App() {
   const [lastCardResult, setLastCardResult] = useState<CreateAnkiWordCardResponse | null>(null);
 
   const selectedCount = wordImages.filter((image) => wordSelected[image.fullPath]).length;
+  const unmatchedVideos = videos.filter((video) => !video.hasSubtitle);
+  const videosWithSubtitle = videos.filter((video) => Boolean(video.subtitlePath));
 
   useEffect(() => {
     void refreshLogs();
@@ -327,6 +334,129 @@ export function App() {
     }
   }
 
+  async function handleBatchMatchVideos() {
+    if (unmatchedVideos.length === 0) {
+      setMessage("所有条目都已有字幕，无需批量匹配。");
+      return;
+    }
+
+    try {
+      setBatchMatching(true);
+      let successCount = 0;
+      const failed: string[] = [];
+
+      for (let index = 0; index < unmatchedVideos.length; index += 1) {
+        const video = unmatchedVideos[index];
+        setMatchingPath(video.fullPath);
+        setMessage(`正在批量匹配 (${index + 1}/${unmatchedVideos.length})：${video.fileName}`);
+        try {
+          const payload = await matchVideo({
+            videoPath: video.fullPath,
+            source,
+            mode: "auto",
+          });
+          if (payload.kind === "downloaded") {
+            mergeVideo(payload.video);
+            setLogs((current) => [payload.log, ...current].slice(0, 200));
+            successCount += 1;
+          } else {
+            failed.push(video.fileName);
+          }
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "未知错误";
+          failed.push(`${video.fileName}（${reason}）`);
+        }
+      }
+
+      const skippedCount = videos.length - unmatchedVideos.length;
+      if (failed.length > 0) {
+        const failedPreview = failed.slice(0, 3).join("；");
+        const suffix = failed.length > 3 ? `；其余失败 ${failed.length - 3} 个` : "";
+        setMessage(
+          `批量匹配完成：成功 ${successCount}/${unmatchedVideos.length}，跳过已有字幕 ${skippedCount} 个。失败：${failedPreview}${suffix}`,
+        );
+      } else {
+        setMessage(`批量匹配完成：成功 ${successCount}/${unmatchedVideos.length}，跳过已有字幕 ${skippedCount} 个。`);
+      }
+    } finally {
+      setMatchingPath(null);
+      setBatchMatching(false);
+    }
+  }
+
+  async function handleOffsetSubtitle(video: VideoItem) {
+    const offsetMs = parseOffsetMilliseconds(subtitleOffsetMsInput);
+    if (offsetMs === null) {
+      setMessage("偏移毫秒请输入整数。");
+      return;
+    }
+    if (!video.subtitlePath) {
+      setMessage(`${video.fileName} 当前没有可偏移的字幕。`);
+      return;
+    }
+
+    try {
+      setOffsettingPath(video.fullPath);
+      setMessage(`正在偏移字幕：${video.fileName}（${offsetMs}ms）`);
+      const payload = await offsetSubtitle({
+        subtitlePath: video.subtitlePath,
+        offsetMs,
+      });
+      setMessage(`已完成偏移：${payload.subtitlePath}（${payload.offsetMs}ms）`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "字幕偏移失败。");
+    } finally {
+      setOffsettingPath(null);
+    }
+  }
+
+  async function handleBatchOffsetSubtitle() {
+    const offsetMs = parseOffsetMilliseconds(subtitleOffsetMsInput);
+    if (offsetMs === null) {
+      setMessage("偏移毫秒请输入整数。");
+      return;
+    }
+    if (videosWithSubtitle.length === 0) {
+      setMessage("当前没有可偏移的字幕文件。");
+      return;
+    }
+
+    try {
+      setBatchOffsetting(true);
+      let successCount = 0;
+      const failed: string[] = [];
+      for (let index = 0; index < videosWithSubtitle.length; index += 1) {
+        const video = videosWithSubtitle[index];
+        if (!video.subtitlePath) {
+          continue;
+        }
+        setOffsettingPath(video.fullPath);
+        setMessage(`正在批量偏移 (${index + 1}/${videosWithSubtitle.length})：${video.fileName}`);
+        try {
+          await offsetSubtitle({
+            subtitlePath: video.subtitlePath,
+            offsetMs,
+          });
+          successCount += 1;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "未知错误";
+          failed.push(`${video.fileName}（${reason}）`);
+        }
+      }
+
+      if (failed.length > 0) {
+        const failedPreview = failed.slice(0, 3).join("；");
+        const suffix = failed.length > 3 ? `；其余失败 ${failed.length - 3} 个` : "";
+        setMessage(`批量偏移完成：成功 ${successCount}/${videosWithSubtitle.length}。失败：${failedPreview}${suffix}`);
+      } else {
+        setMessage(`批量偏移完成：成功 ${successCount}/${videosWithSubtitle.length}。`);
+      }
+    } finally {
+      setOffsettingPath(null);
+      setBatchOffsetting(false);
+    }
+  }
+
   async function handleCreateWordNote(image: ImageItem) {
     const targetWord = (wordInputs[image.fullPath] ?? "").trim();
     if (!targetWord) {
@@ -474,7 +604,17 @@ export function App() {
           <main className="layout">
             <section className="control-card">
               <div className="section-title-row">
-                <h2>工作区</h2>
+                <div className="section-title-main">
+                  <button
+                    className="action-button secondary"
+                    type="button"
+                    onClick={() => void handleBatchMatchVideos()}
+                    disabled={batchMatching || unmatchedVideos.length === 0}
+                  >
+                    {batchMatching ? "批量匹配中..." : `批量匹配未添加项 (${unmatchedVideos.length})`}
+                  </button>
+                  <h2>工作区</h2>
+                </div>
                 <div className="section-actions">
                   <button className="ghost-button" type="button" onClick={() => void handleOpenFolder()}>
                     打开文件夹
@@ -486,6 +626,26 @@ export function App() {
                     刷新日志
                   </button>
                 </div>
+              </div>
+
+              <div className="toolbar toolbar-top">
+                <label className="grow-field">
+                  <span>字幕偏移（毫秒，负数向前，正数向后）</span>
+                  <input
+                    className="text-input"
+                    value={subtitleOffsetMsInput}
+                    onChange={(event) => setSubtitleOffsetMsInput(event.target.value)}
+                    placeholder="例如 -1200 或 800"
+                  />
+                </label>
+                <button
+                  className="action-button secondary"
+                  type="button"
+                  onClick={() => void handleBatchOffsetSubtitle()}
+                  disabled={batchOffsetting || videosWithSubtitle.length === 0}
+                >
+                  {batchOffsetting ? "批量偏移中..." : `批量偏移字幕 (${videosWithSubtitle.length})`}
+                </button>
               </div>
 
               <label className="field-label" htmlFor="folderPath">
@@ -551,6 +711,7 @@ export function App() {
                   {videos.map((video) => {
                     const busy = matchingPath === video.fullPath;
                     const playing = playingPath === video.fullPath;
+                    const offsetBusy = offsettingPath === video.fullPath;
                     return (
                       <article className="video-card" key={video.fullPath}>
                         <div className="video-meta">
@@ -564,11 +725,29 @@ export function App() {
                         </div>
 
                         <div className="video-actions">
-                          <button className="ghost-button" type="button" onClick={() => void handlePlayVideo(video)} disabled={playing}>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => void handlePlayVideo(video)}
+                            disabled={playing || batchMatching || batchOffsetting}
+                          >
                             {playing ? "播放中..." : "播放"}
                           </button>
-                          <button className="action-button" type="button" onClick={() => void handleMatchVideo(video)} disabled={busy}>
+                          <button
+                            className="action-button"
+                            type="button"
+                            onClick={() => void handleMatchVideo(video)}
+                            disabled={busy || batchMatching || batchOffsetting}
+                          >
                             {busy ? "匹配中..." : mode === "candidate" ? "查找候选字幕" : "匹配并下载字幕"}
+                          </button>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => void handleOffsetSubtitle(video)}
+                            disabled={!video.subtitlePath || offsetBusy || batchOffsetting || batchMatching}
+                          >
+                            {offsetBusy ? "偏移中..." : "偏移字幕"}
                           </button>
                         </div>
                       </article>
@@ -856,6 +1035,17 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("zh-CN", {
     hour12: false,
   });
+}
+
+function parseOffsetMilliseconds(input: string): number | null {
+  const value = input.trim();
+  if (!value) {
+    return null;
+  }
+  if (!/^-?\d+$/.test(value)) {
+    return null;
+  }
+  return Number.parseInt(value, 10);
 }
 
 function sanitizeExampleHtml(value: string): string {

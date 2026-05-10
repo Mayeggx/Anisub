@@ -100,6 +100,17 @@ export interface DownloadCandidateResponse {
   log: MatchLogItem;
 }
 
+export interface OffsetSubtitleRequest {
+  subtitlePath: string;
+  offsetMs: number;
+}
+
+export interface OffsetSubtitleResponse {
+  subtitlePath: string;
+  offsetMs: number;
+  format: "srt" | "ass";
+}
+
 export interface LogsResponse {
   logs: MatchLogItem[];
 }

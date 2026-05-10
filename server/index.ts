@@ -16,6 +16,8 @@ import {
   MatchLogItem,
   MatchVideoRequest,
   MatchVideoResponse,
+  OffsetSubtitleRequest,
+  OffsetSubtitleResponse,
   OpenFolderRequest,
   OpenFolderResponse,
   PickFolderResponse,
@@ -34,6 +36,7 @@ import { isSupportedImageFile, scanImageFolder } from "./image-library";
 import { LogStore } from "./log-store";
 import { EdatribeSubtitleMatcher } from "./matchers/edatribe";
 import { JimakuSubtitleMatcher } from "./matchers/jimaku";
+import { offsetSubtitleFile } from "./subtitle-offset";
 import { DesktopVideoContext, SubtitleMatcher } from "./subtitle-matcher";
 import { getVideoByPath, scanVideoFolder } from "./video-library";
 import { openFolderInExplorer, openTextFile, openVideoInPlayer, pickFolder } from "./windows-picker";
@@ -226,6 +229,28 @@ app.post("/api/download-candidate", async (request, response, next) => {
       video: updatedVideo,
       result,
       log,
+    };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/offset-subtitle", async (request, response, next) => {
+  try {
+    const body = request.body as OffsetSubtitleRequest;
+    if (!body?.subtitlePath) {
+      throw new AppError("Missing subtitle path.", 400);
+    }
+    if (!Number.isFinite(body.offsetMs)) {
+      throw new AppError("Invalid subtitle offset milliseconds.", 400);
+    }
+    const offsetMs = Math.trunc(body.offsetMs);
+    const format = await offsetSubtitleFile(body.subtitlePath, offsetMs);
+    const payload: OffsetSubtitleResponse = {
+      subtitlePath: path.resolve(body.subtitlePath),
+      offsetMs,
+      format,
     };
     response.json(payload);
   } catch (error) {
