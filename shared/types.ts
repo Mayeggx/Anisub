@@ -52,6 +52,8 @@ export interface ImageItem {
   fullPath: string;
   folderPath: string;
   subtitleText: string;
+  added: boolean;
+  addedAt?: string;
 }
 
 export interface ScanImageFolderRequest {

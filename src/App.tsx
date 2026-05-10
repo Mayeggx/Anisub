@@ -69,14 +69,18 @@ export function App() {
   );
   const [wordImages, setWordImages] = useState<ImageItem[]>([]);
   const [wordInputs, setWordInputs] = useState<Record<string, string>>({});
+  const [wordSelected, setWordSelected] = useState<Record<string, boolean>>({});
   const [wordMode, setWordMode] = useState<WordNoteMode>(
     () => (localStorage.getItem(STORAGE_KEYS.wordNoteMode) as WordNoteMode | null) ?? "auto",
   );
   const [wordConfig, setWordConfig] = useState<WordNoteConfigResponse | null>(null);
   const [wordStatus, setWordStatus] = useState("先选择图片文件夹并加载图片列表。");
   const [wordBusyPath, setWordBusyPath] = useState<string | null>(null);
+  const [wordBatchBusy, setWordBatchBusy] = useState(false);
   const [wordResult, setWordResult] = useState<CreateWordNoteResponse | null>(null);
   const [lastCardResult, setLastCardResult] = useState<CreateAnkiWordCardResponse | null>(null);
+
+  const selectedCount = wordImages.filter((image) => wordSelected[image.fullPath]).length;
 
   useEffect(() => {
     void refreshLogs();
@@ -112,7 +116,6 @@ export function App() {
       return;
     }
     void handleScan(folderPath, false);
-    // The initial scan should run once with persisted folderPath.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -121,7 +124,6 @@ export function App() {
       return;
     }
     void handleScanWordImages(wordImageFolderPath, false);
-    // The initial scan should run once with persisted folderPath.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -185,11 +187,7 @@ export function App() {
       if (persist) {
         localStorage.setItem(STORAGE_KEYS.folderPath, payload.folderPath);
       }
-      setMessage(
-        payload.videos.length === 0
-          ? "当前目录没有识别到视频文件。"
-          : `已扫描到 ${payload.videos.length} 个视频文件。`,
-      );
+      setMessage(payload.videos.length === 0 ? "当前目录没有识别到视频文件。" : `已扫描到 ${payload.videos.length} 个视频文件。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "扫描失败。");
     } finally {
@@ -219,10 +217,15 @@ export function App() {
         }
         return next;
       });
+      setWordSelected((current) => {
+        const next: Record<string, boolean> = {};
+        for (const image of payload.images) {
+          next[image.fullPath] = current[image.fullPath] ?? false;
+        }
+        return next;
+      });
 
-      setWordStatus(
-        payload.images.length === 0 ? "当前目录没有识别到图片文件。" : `已加载 ${payload.images.length} 张图片。`,
-      );
+      setWordStatus(payload.images.length === 0 ? "当前目录没有识别到图片文件。" : `已加载 ${payload.images.length} 张图片。`);
     } catch (error) {
       setWordStatus(error instanceof Error ? error.message : "扫描图片失败。");
     }
@@ -324,26 +327,45 @@ export function App() {
     try {
       setWordBusyPath(image.fullPath);
       setWordStatus(`正在创建 Anki 卡片：${image.fileName} ...`);
-      const payload = await createAnkiWordCard({
-        imagePath: image.fullPath,
-        subtitle: image.subtitleText,
-        targetWord,
-        mode: wordMode,
-      });
-      setLastCardResult(payload);
-      setWordResult({
-        mode: payload.mode,
-        note: payload.wordNote,
-      });
-      setWordStatus(
-        payload.status === "updated"
-          ? `已更新卡片（ID: ${payload.noteId}，${image.fileName}）。`
-          : `已创建卡片（ID: ${payload.noteId}，${image.fileName}）。`,
-      );
+      const payload = await submitAnkiCard(image, targetWord);
+      setWordStatus(buildCardSuccessMessage(payload, image.fileName));
     } catch (error) {
       setWordStatus(error instanceof Error ? error.message : "创建 Anki 卡片失败。");
     } finally {
       setWordBusyPath(null);
+    }
+  }
+
+  async function handleBatchCreateWordNotes() {
+    const selectedItems = wordImages.filter((image) => wordSelected[image.fullPath]);
+    if (selectedItems.length === 0) {
+      setWordStatus("请先勾选需要批量添加的条目。");
+      return;
+    }
+    for (const image of selectedItems) {
+      const targetWord = (wordInputs[image.fullPath] ?? "").trim();
+      if (!targetWord) {
+        setWordStatus(`请先为 ${image.fileName} 输入目标单词。`);
+        return;
+      }
+    }
+
+    try {
+      setWordBatchBusy(true);
+      let successCount = 0;
+      for (const image of selectedItems) {
+        const targetWord = (wordInputs[image.fullPath] ?? "").trim();
+        setWordBusyPath(image.fullPath);
+        setWordStatus(`正在批量创建：${image.fileName} ...`);
+        await submitAnkiCard(image, targetWord);
+        successCount += 1;
+      }
+      setWordStatus(`批量添加完成，成功 ${successCount} / ${selectedItems.length} 条。`);
+    } catch (error) {
+      setWordStatus(error instanceof Error ? error.message : "批量添加失败。");
+    } finally {
+      setWordBusyPath(null);
+      setWordBatchBusy(false);
     }
   }
 
@@ -359,6 +381,39 @@ export function App() {
 
   function mergeVideo(video: VideoItem) {
     setVideos((current) => current.map((item) => (item.fullPath === video.fullPath ? video : item)));
+  }
+
+  async function submitAnkiCard(image: ImageItem, targetWord: string): Promise<CreateAnkiWordCardResponse> {
+    const payload = await createAnkiWordCard({
+      imagePath: image.fullPath,
+      subtitle: image.subtitleText,
+      targetWord,
+      mode: wordMode,
+    });
+    setLastCardResult(payload);
+    setWordResult({
+      mode: payload.mode,
+      note: payload.wordNote,
+    });
+    setWordImages((current) =>
+      current.map((item) =>
+        item.fullPath === image.fullPath
+          ? {
+              ...item,
+              added: true,
+              addedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    );
+    setWordSelected((current) => ({ ...current, [image.fullPath]: false }));
+    return payload;
+  }
+
+  function buildCardSuccessMessage(payload: CreateAnkiWordCardResponse, fileName: string): string {
+    return payload.status === "updated"
+      ? `已更新卡片（ID: ${payload.noteId}，${fileName}）。`
+      : `已创建卡片（ID: ${payload.noteId}，${fileName}）。`;
   }
 
   return (
@@ -480,20 +535,10 @@ export function App() {
                         </div>
 
                         <div className="video-actions">
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => void handlePlayVideo(video)}
-                            disabled={playing}
-                          >
+                          <button className="ghost-button" type="button" onClick={() => void handlePlayVideo(video)} disabled={playing}>
                             {playing ? "播放中..." : "播放"}
                           </button>
-                          <button
-                            className="action-button"
-                            type="button"
-                            onClick={() => void handleMatchVideo(video)}
-                            disabled={busy}
-                          >
+                          <button className="action-button" type="button" onClick={() => void handleMatchVideo(video)} disabled={busy}>
                             {busy ? "匹配中..." : mode === "candidate" ? "查找候选字幕" : "匹配并下载字幕"}
                           </button>
                         </div>
@@ -552,6 +597,7 @@ export function App() {
                   <code>{wordConfig?.configPath ?? "加载中..."}</code>
                 </div>
               </div>
+
               <p className="hint-text">
                 当前模型：<code>{wordConfig?.config.openai.modelName ?? "-"}</code> ｜ Base URL：
                 <code>{wordConfig?.config.openai.baseUrl ?? "-"}</code>
@@ -565,6 +611,7 @@ export function App() {
                 <code>{wordConfig?.config.anki.maxHeight ?? "-"}</code> ｜ 质量：
                 <code>{wordConfig?.config.anki.imageQuality ?? "-"}</code>
               </p>
+
               <p className="status-banner">{wordStatus}</p>
             </section>
 
@@ -578,16 +625,29 @@ export function App() {
               ) : (
                 <div className="word-image-list">
                   {wordImages.map((image) => {
-                    const busy = wordBusyPath === image.fullPath;
+                    const busy = wordBusyPath === image.fullPath || wordBatchBusy;
                     return (
                       <article className="word-image-card" key={image.fullPath}>
+                        <label className="word-image-check">
+                          <input
+                            type="checkbox"
+                            checked={wordSelected[image.fullPath] ?? false}
+                            onChange={(event) =>
+                              setWordSelected((current) => ({
+                                ...current,
+                                [image.fullPath]: event.target.checked,
+                              }))
+                            }
+                            disabled={wordBatchBusy}
+                          />
+                        </label>
                         <img
                           className="word-image-preview"
                           src={`/api/image-file?path=${encodeURIComponent(image.fullPath)}`}
                           alt={image.fileName}
                         />
                         <div className="word-image-main">
-                          <h3 title={image.fileName}>{image.fileName}</h3>
+                          <h3 title={image.fileName}>{image.fileName}{image.added ? "（已添加）" : ""}</h3>
                           <p>{image.subtitleText}</p>
                           <div className="word-image-actions">
                             <input
@@ -601,12 +661,7 @@ export function App() {
                               }
                               placeholder="输入目标单词"
                             />
-                            <button
-                              className="action-button"
-                              type="button"
-                              onClick={() => void handleCreateWordNote(image)}
-                              disabled={busy}
-                            >
+                            <button className="action-button" type="button" onClick={() => void handleCreateWordNote(image)} disabled={busy}>
                               {busy ? "创建中..." : "创建 Anki 卡片"}
                             </button>
                           </div>
@@ -628,8 +683,7 @@ export function App() {
                     <div className="word-note-row">
                       <strong>写入状态</strong>
                       <span>
-                        {lastCardResult.status === "updated" ? "已更新已有卡片" : "已创建新卡片"} ｜ Note ID:{" "}
-                        {lastCardResult.noteId}
+                        {lastCardResult.status === "updated" ? "已更新已有卡片" : "已创建新卡片"} ｜ Note ID: {lastCardResult.noteId}
                       </span>
                     </div>
                   ) : null}
@@ -669,6 +723,17 @@ export function App() {
           </main>
         )}
       </div>
+
+      {activeFeature === "word-note" && wordImages.length > 0 ? (
+        <button
+          className="batch-fab"
+          type="button"
+          onClick={() => void handleBatchCreateWordNotes()}
+          disabled={selectedCount === 0 || wordBatchBusy}
+        >
+          {wordBatchBusy ? "批量添加中..." : `批量添加 (${selectedCount})`}
+        </button>
+      ) : null}
 
       {candidateDialog ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setCandidateDialog(null)}>
@@ -754,11 +819,7 @@ function formatDateTime(value: string): string {
 }
 
 function sanitizeExampleHtml(value: string): string {
-  const escaped = value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-
+  const escaped = value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
   return escaped
     .replaceAll("&lt;b&gt;", "<b>")
     .replaceAll("&lt;/b&gt;", "</b>")

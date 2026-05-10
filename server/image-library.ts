@@ -22,6 +22,7 @@ export async function scanImageFolder(folderPath: string): Promise<ImageItem[]> 
       fullPath: path.join(normalized, entry.name),
       folderPath: normalized,
       subtitleText: path.parse(entry.name).name,
+      added: false,
     }));
 }
 

@@ -36,6 +36,7 @@ import { JimakuSubtitleMatcher } from "./matchers/jimaku";
 import { DesktopVideoContext, SubtitleMatcher } from "./subtitle-matcher";
 import { getVideoByPath, scanVideoFolder } from "./video-library";
 import { openFolderInExplorer, openTextFile, openVideoInPlayer, pickFolder } from "./windows-picker";
+import { listWordCardLogRecords, upsertWordCardLogRecord } from "./word-card-log";
 import { getWordNoteConfigPath, readWordNoteConfig } from "./word-note-config";
 import { createWordNote } from "./word-note";
 
@@ -100,10 +101,20 @@ app.post("/api/scan-image-folder", async (request, response, next) => {
     if (!body?.folderPath) {
       throw new AppError("Missing folder path.", 400);
     }
-    const images = await scanImageFolder(body.folderPath);
+    const [images, cardLogs] = await Promise.all([scanImageFolder(body.folderPath), listWordCardLogRecords()]);
+    const statusMap = new Map(cardLogs.map((item) => [path.resolve(item.imagePath).toLowerCase(), item]));
+    const mappedImages = images.map((image) => {
+      const key = path.resolve(image.fullPath).toLowerCase();
+      const hit = statusMap.get(key);
+      return {
+        ...image,
+        added: Boolean(hit),
+        addedAt: hit?.updatedAt,
+      };
+    });
     const payload: ScanImageFolderResponse = {
       folderPath: path.resolve(body.folderPath),
-      images,
+      images: mappedImages,
     };
     response.json(payload);
   } catch (error) {
@@ -234,6 +245,11 @@ app.post("/api/create-anki-word-card", async (request, response, next) => {
   try {
     const body = request.body as CreateAnkiWordCardRequest;
     const payload: CreateAnkiWordCardResponse = await createAnkiWordCard(body);
+    await upsertWordCardLogRecord({
+      imagePath: body.imagePath,
+      noteId: payload.noteId,
+      updatedAt: new Date().toISOString(),
+    });
     response.json(payload);
   } catch (error) {
     next(error);
