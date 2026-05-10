@@ -385,13 +385,17 @@ export function App() {
   }
 
   async function handleOffsetSubtitle(video: VideoItem) {
-    const offsetMs = parseOffsetMilliseconds(subtitleOffsetMsInput);
-    if (offsetMs === null) {
-      setMessage("偏移毫秒请输入整数。");
-      return;
-    }
     if (!video.subtitlePath) {
       setMessage(`${video.fileName} 当前没有可偏移的字幕。`);
+      return;
+    }
+    const input = window.prompt(`请输入 ${video.fileName} 的偏移量（毫秒，负数向前，正数向后）`, "0");
+    if (input === null) {
+      return;
+    }
+    const offsetMs = parseOffsetMilliseconds(input);
+    if (offsetMs === null) {
+      setMessage("偏移毫秒请输入整数。");
       return;
     }
 
@@ -605,14 +609,6 @@ export function App() {
             <section className="control-card">
               <div className="section-title-row">
                 <div className="section-title-main">
-                  <button
-                    className="action-button secondary"
-                    type="button"
-                    onClick={() => void handleBatchMatchVideos()}
-                    disabled={batchMatching || unmatchedVideos.length === 0}
-                  >
-                    {batchMatching ? "批量匹配中..." : `批量匹配未添加项 (${unmatchedVideos.length})`}
-                  </button>
                   <h2>工作区</h2>
                 </div>
                 <div className="section-actions">
@@ -626,26 +622,6 @@ export function App() {
                     刷新日志
                   </button>
                 </div>
-              </div>
-
-              <div className="toolbar toolbar-top">
-                <label className="grow-field">
-                  <span>字幕偏移（毫秒，负数向前，正数向后）</span>
-                  <input
-                    className="text-input"
-                    value={subtitleOffsetMsInput}
-                    onChange={(event) => setSubtitleOffsetMsInput(event.target.value)}
-                    placeholder="例如 -1200 或 800"
-                  />
-                </label>
-                <button
-                  className="action-button secondary"
-                  type="button"
-                  onClick={() => void handleBatchOffsetSubtitle()}
-                  disabled={batchOffsetting || videosWithSubtitle.length === 0}
-                >
-                  {batchOffsetting ? "批量偏移中..." : `批量偏移字幕 (${videosWithSubtitle.length})`}
-                </button>
               </div>
 
               <label className="field-label" htmlFor="folderPath">
@@ -682,18 +658,45 @@ export function App() {
                     <option value="candidate">候选确认</option>
                   </select>
                 </label>
+                <label className="grow-field">
+                  <span>本地播放器路径</span>
+                  <input
+                    id="playerPath"
+                    className="text-input"
+                    value={playerPath}
+                    onChange={(event) => setPlayerPath(event.target.value)}
+                    placeholder="例如 D:\\Software\\mpv\\mpv.exe"
+                  />
+                </label>
               </div>
 
-              <label className="field-label player-field" htmlFor="playerPath">
-                本地播放器路径
-              </label>
-              <input
-                id="playerPath"
-                className="text-input"
-                value={playerPath}
-                onChange={(event) => setPlayerPath(event.target.value)}
-                placeholder="例如 D:\\Software\\mpv\\mpv.exe"
-              />
+              <div className="toolbar batch-toolbar">
+                <button
+                  className="action-button secondary"
+                  type="button"
+                  onClick={() => void handleBatchMatchVideos()}
+                  disabled={batchMatching || unmatchedVideos.length === 0}
+                >
+                  {batchMatching ? "批量匹配中..." : `批量匹配未添加项 (${unmatchedVideos.length})`}
+                </button>
+                <button
+                  className="action-button secondary"
+                  type="button"
+                  onClick={() => void handleBatchOffsetSubtitle()}
+                  disabled={batchOffsetting || videosWithSubtitle.length === 0}
+                >
+                  {batchOffsetting ? "批量偏移中..." : `批量偏移字幕 (${videosWithSubtitle.length})`}
+                </button>
+                <label className="compact-offset-field">
+                  <span>偏移量（毫秒）</span>
+                  <input
+                    className="text-input"
+                    value={subtitleOffsetMsInput}
+                    onChange={(event) => setSubtitleOffsetMsInput(event.target.value)}
+                    placeholder="例如 -1200"
+                  />
+                </label>
+              </div>
 
               <p className="status-banner">{message}</p>
             </section>

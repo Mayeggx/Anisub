@@ -192,15 +192,6 @@ code {
   margin-top: 16px;
 }
 
-.toolbar-top {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.player-field {
-  margin-top: 16px;
-}
-
 .text-input,
 .select-wrap select,
 .text-area {
@@ -258,6 +249,22 @@ code {
   min-width: 0;
   width: 100%;
   flex: initial;
+}
+
+.batch-toolbar {
+  margin-top: 14px;
+}
+
+.compact-offset-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.compact-offset-field .text-input {
+  flex: initial;
+  width: 200px;
+  min-width: 160px;
 }
 
 .word-config-grid {
