@@ -40,7 +40,10 @@ export async function createWordNote(input: CreateWordNoteRequest): Promise<Crea
 
   const mode = resolveWordMode(input.mode, targetWord);
   const prompt = buildPrompt(mode, subtitle, targetWord);
-  const systemPrompt = mode === "jp" ? "你是专业的日语词典助手。请只返回 JSON。" : "You are a professional English dictionary assistant. Return JSON only.";
+  const systemPrompt =
+    mode === "jp"
+      ? "你是专业的日语词典助手。请只返回 JSON。"
+      : "You are a professional English dictionary assistant. Return JSON only.";
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
   const response = await fetch(endpoint, {
@@ -88,30 +91,46 @@ export function resolveWordMode(mode: CreateWordNoteRequest["mode"], targetWord:
 function buildPrompt(mode: WordNoteLanguage, subtitle: string, targetWord: string): string {
   if (mode === "en") {
     return [
-      "Use the subtitle sentence and target word to produce a single JSON object.",
-      "Required keys: 单词, 音标, 意义, 例句, 笔记",
+      "Please analyze the target word in the subtitle sentence and return ONE JSON object.",
+      "Required JSON keys: 单词, 音标, 意义, 例句, 笔记",
       "Rules:",
       "1) 单词: return lemma/base form.",
-      "2) 音标: IPA or common dictionary pronunciation.",
-      "3) 意义: English meaning only; do not repeat the word.",
-      `4) 例句: keep original sentence and wrap target word with <b>${targetWord}</b>.`,
-      "5) 笔记: explain in Chinese based on the context.",
-      "Return JSON only, without markdown.",
+      "2) 音标: IPA or common dictionary style.",
+      "3) 意义: English definition only, do not repeat the word itself.",
+      `4) 例句: keep original sentence and wrap the target word with <b>${targetWord}</b>.`,
+      "5) 笔记: explain the meaning in Chinese based on context.",
+      "Return JSON only. No markdown, no extra text.",
+      "",
+      "Example input:",
+      "例句: The Demon Sword's wavelength seems to be... swelling",
+      "单词: swelling",
+      "Example output:",
+      "{\"单词\":\"swell\",\"音标\":\"swel\",\"意义\":\"to increase in size, intensity, or power\",\"例句\":\"The Demon Sword's wavelength seems to be... <b>swelling</b>\",\"笔记\":\"这里的 swelling 指能量正在增强、膨胀，不是身体肿胀。\"}",
+      "",
+      "Current input:",
       `例句: ${subtitle}`,
       `单词: ${targetWord}`,
     ].join("\n");
   }
 
   return [
-    "请根据字幕句子和目标单词，输出单个 JSON 对象。",
-    "必须包含以下键：单词、音标、意义、例句、笔记",
+    "请根据字幕句子和目标单词，返回一个 JSON 对象。",
+    "必须包含键：单词、音标、意义、例句、笔记",
     "要求：",
     "1) 单词：返回原型（如果是变形，返回原形）。",
     "2) 音标：给出日语读音。",
     "3) 意义：只写日文释义，不要重复单词本身。",
-    `4) 例句：保留原句，并将目标词用 <b>${targetWord}</b> 包裹。`,
+    `4) 例句：保留原句，并把目标词用 <b>${targetWord}</b> 包裹。`,
     "5) 笔记：用中文结合语境解释这个词在句中的意思。",
-    "仅返回 JSON，不要 markdown。",
+    "只返回 JSON，不要 markdown，不要额外说明。",
+    "",
+    "示例输入：",
+    "例句：連絡先を忘れたって わめいてたろ",
+    "单词：わめいて",
+    "示例输出：",
+    "{\"单词\":\"喚く\",\"音标\":\"わめく\",\"意义\":\"大声でさけぶ。騒ぎ立てる。\",\"例句\":\"連絡先を忘れたって <b>わめいて</b>たろ\",\"笔记\":\"这里表示因为忘记联系方式而情绪激动地大声叫嚷。\"}",
+    "",
+    "当前输入：",
     `例句：${subtitle}`,
     `单词：${targetWord}`,
   ].join("\n");
