@@ -217,7 +217,6 @@ export class RemoteSyncService {
 
   async delete(entryId: string): Promise<RemoteSyncStateResponse> {
     return this.runTask("删除", async () => {
-      const config = await this.store.loadConfig();
       const localBindings = await this.store.loadBindings();
       const knownEntries = await this.getKnownEntries(localBindings);
       const entry = knownEntries.find((item) => item.id === entryId);
@@ -225,6 +224,17 @@ export class RemoteSyncService {
         throw new AppError("条目不存在。", 404);
       }
 
+      const localBinding = localBindings.find((item) => item.id === entryId);
+      const remoteEntries = await this.gitService.scanRemoteEntries().catch(() => [] as RepoEntryMeta[]);
+      const existsInRemoteRepo = remoteEntries.some((item) => item.id === entry.id || item.repoPath === entry.repoPath);
+      if (localBinding && !existsInRemoteRepo) {
+        this.appendGitLog(`删除条目: ${entry.displayName}（仅本地条目，跳过 push）`);
+        await this.store.saveBindings(localBindings.filter((item) => item.id !== entryId));
+        await this.refreshEntryListInternal();
+        return `删除完成：${entry.displayName}（仅本地条目，无需 push）`;
+      }
+
+      const config = await this.store.loadConfig();
       this.appendGitLog(`删除条目: ${entry.displayName} (${entry.repoPath})`);
       await this.gitService.deleteEntry(config, entry.repoPath, (line) => this.appendGitLog(line));
       await this.store.saveBindings(localBindings.filter((item) => item.id !== entryId));
@@ -628,8 +638,7 @@ class RemoteSyncGitService {
   ): Promise<void> {
     logger(`暂存路径: ${paths.join(", ")}`);
     for (const filePath of paths) {
-      await this.runGit(["add", "--", filePath], { cwd: this.repoDir });
-      await this.runGit(["add", "-u", "--", filePath], { cwd: this.repoDir });
+      await this.stagePathForCommit(filePath);
     }
     const statusResult = await this.runGit(["status", "--porcelain"], { cwd: this.repoDir });
     if (statusResult.stdout.trim()) {
@@ -645,6 +654,22 @@ class RemoteSyncGitService {
       logger("push 被拒绝或发生传输异常，尝试先 pull 再重试。");
       await this.safePull(config, logger);
       await this.pushOrThrow(config);
+    }
+  }
+
+  private async stagePathForCommit(repoRelativePath: string): Promise<void> {
+    const absolutePath = path.join(this.repoDir, repoRelativePath);
+    if (await exists(absolutePath)) {
+      await this.runGit(["add", "--", repoRelativePath], { cwd: this.repoDir });
+      return;
+    }
+
+    const trackedResult = await this.runGit(["ls-files", "--error-unmatch", "--", repoRelativePath], {
+      cwd: this.repoDir,
+      allowFailure: true,
+    });
+    if (trackedResult.code === 0) {
+      await this.runGit(["add", "-u", "--", repoRelativePath], { cwd: this.repoDir });
     }
   }
 
