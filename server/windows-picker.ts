@@ -71,6 +71,21 @@ export async function openVideoInPlayer(playerPath: string, videoPath: string): 
   await spawnDetachedProcess(resolvedPlayerPath, [resolvedVideoPath]);
 }
 
+export async function openTextFile(targetPath: string): Promise<string> {
+  if (process.platform !== "win32") {
+    throw new AppError("Opening config file is only supported on Windows.", 400);
+  }
+
+  const resolvedPath = path.resolve(normalizeInputPath(targetPath));
+  const exists = await pathExistsAny(resolvedPath);
+  if (!exists) {
+    throw new AppError("Config file was not found.", 404);
+  }
+
+  await spawnDetachedProcess("notepad.exe", [resolvedPath]);
+  return resolvedPath;
+}
+
 function runPowerShell(script: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn("powershell", ["-NoProfile", "-Command", script], {
@@ -113,6 +128,21 @@ async function pathExists(targetPath: string): Promise<boolean> {
       "-NoProfile",
       "-Command",
       `if (Test-Path -LiteralPath '${escapePowerShell(targetPath)}' -PathType Leaf) { exit 0 } else { exit 1 }`,
+    ], {
+      windowsHide: true,
+    });
+
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
+async function pathExistsAny(targetPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn("powershell", [
+      "-NoProfile",
+      "-Command",
+      `if (Test-Path -LiteralPath '${escapePowerShell(targetPath)}') { exit 0 } else { exit 1 }`,
     ], {
       windowsHide: true,
     });

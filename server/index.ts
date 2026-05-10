@@ -1,10 +1,16 @@
 import express from "express";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 
 import {
+  CreateAnkiWordCardRequest,
+  CreateAnkiWordCardResponse,
+  CreateWordNoteRequest,
+  CreateWordNoteResponse,
   DownloadCandidateRequest,
   DownloadCandidateResponse,
+  OpenConfigFileResponse,
   LogsResponse,
   MatchLogItem,
   MatchVideoRequest,
@@ -14,17 +20,24 @@ import {
   PickFolderResponse,
   PlayVideoRequest,
   PlayVideoResponse,
+  ScanImageFolderRequest,
+  ScanImageFolderResponse,
   ScanFolderRequest,
   ScanFolderResponse,
   SubtitleSource,
+  WordNoteConfigResponse,
 } from "../shared/types";
 import { AppError, toErrorMessage } from "./errors";
+import { createAnkiWordCard } from "./anki-word-card";
+import { isSupportedImageFile, scanImageFolder } from "./image-library";
 import { LogStore } from "./log-store";
 import { EdatribeSubtitleMatcher } from "./matchers/edatribe";
 import { JimakuSubtitleMatcher } from "./matchers/jimaku";
 import { DesktopVideoContext, SubtitleMatcher } from "./subtitle-matcher";
 import { getVideoByPath, scanVideoFolder } from "./video-library";
-import { openFolderInExplorer, openVideoInPlayer, pickFolder } from "./windows-picker";
+import { openFolderInExplorer, openTextFile, openVideoInPlayer, pickFolder } from "./windows-picker";
+import { getWordNoteConfigPath, readWordNoteConfig } from "./word-note-config";
+import { createWordNote } from "./word-note";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
@@ -76,6 +89,39 @@ app.post("/api/scan-folder", async (request, response, next) => {
       videos,
     };
     response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/scan-image-folder", async (request, response, next) => {
+  try {
+    const body = request.body as ScanImageFolderRequest;
+    if (!body?.folderPath) {
+      throw new AppError("Missing folder path.", 400);
+    }
+    const images = await scanImageFolder(body.folderPath);
+    const payload: ScanImageFolderResponse = {
+      folderPath: path.resolve(body.folderPath),
+      images,
+    };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/image-file", async (request, response, next) => {
+  try {
+    const queryPath = String(request.query.path ?? "");
+    if (!queryPath) {
+      throw new AppError("Missing image path.", 400);
+    }
+    const imagePath = path.resolve(queryPath);
+    if (!(await isSupportedImageFile(imagePath))) {
+      throw new AppError("Unsupported or missing image file.", 404);
+    }
+    response.sendFile(imagePath);
   } catch (error) {
     next(error);
   }
@@ -168,6 +214,55 @@ app.post("/api/download-candidate", async (request, response, next) => {
       result,
       log,
     };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/word-note", async (request, response, next) => {
+  try {
+    const body = request.body as CreateWordNoteRequest;
+    const payload: CreateWordNoteResponse = await createWordNote(body);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/create-anki-word-card", async (request, response, next) => {
+  try {
+    const body = request.body as CreateAnkiWordCardRequest;
+    const payload: CreateAnkiWordCardResponse = await createAnkiWordCard(body);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/word-note-config", async (_request, response, next) => {
+  try {
+    const configPath = await getWordNoteConfigPath();
+    const config = await readWordNoteConfig();
+    const payload: WordNoteConfigResponse = {
+      configPath,
+      config,
+    };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/open-word-note-config", async (_request, response, next) => {
+  try {
+    const configPath = await getWordNoteConfigPath();
+    const fileStat = await stat(configPath).catch(() => null);
+    if (!fileStat?.isFile()) {
+      throw new AppError("Config file was not found.", 404);
+    }
+    const openedPath = await openTextFile(configPath);
+    const payload: OpenConfigFileResponse = { openedPath };
     response.json(payload);
   } catch (error) {
     next(error);

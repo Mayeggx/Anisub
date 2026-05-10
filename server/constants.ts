@@ -20,3 +20,12 @@ export const SUBTITLE_EXTENSIONS = new Set([
 ]);
 
 export const SUBTITLE_PRIORITY = [".srt", ".ass", ".ssa", ".vtt", ".sup", ".sub"];
+
+export const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".webp",
+]);

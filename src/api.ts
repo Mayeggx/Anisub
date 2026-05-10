@@ -1,16 +1,24 @@
 import {
+  CreateAnkiWordCardRequest,
+  CreateAnkiWordCardResponse,
+  CreateWordNoteRequest,
+  CreateWordNoteResponse,
   DownloadCandidateRequest,
   DownloadCandidateResponse,
   LogsResponse,
   MatchVideoRequest,
   MatchVideoResponse,
+  OpenConfigFileResponse,
   OpenFolderRequest,
   OpenFolderResponse,
   PickFolderResponse,
   PlayVideoRequest,
   PlayVideoResponse,
+  ScanImageFolderRequest,
+  ScanImageFolderResponse,
   ScanFolderRequest,
   ScanFolderResponse,
+  WordNoteConfigResponse,
 } from "../shared/types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -69,6 +77,37 @@ export function downloadCandidate(
   body: DownloadCandidateRequest,
 ): Promise<DownloadCandidateResponse> {
   return request("/api/download-candidate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function createWordNote(body: CreateWordNoteRequest): Promise<CreateWordNoteResponse> {
+  return request("/api/word-note", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function scanImageFolder(body: ScanImageFolderRequest): Promise<ScanImageFolderResponse> {
+  return request("/api/scan-image-folder", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchWordNoteConfig(): Promise<WordNoteConfigResponse> {
+  return request("/api/word-note-config");
+}
+
+export function openWordNoteConfig(): Promise<OpenConfigFileResponse> {
+  return request("/api/open-word-note-config", {
+    method: "POST",
+  });
+}
+
+export function createAnkiWordCard(body: CreateAnkiWordCardRequest): Promise<CreateAnkiWordCardResponse> {
+  return request("/api/create-anki-word-card", {
     method: "POST",
     body: JSON.stringify(body),
   });
