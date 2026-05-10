@@ -15,6 +15,7 @@ import {
   scanFolder,
   scanImageFolder,
 } from "./api";
+import { RemoteSyncPage } from "./RemoteSyncPage";
 import type {
   CreateAnkiWordCardResponse,
   CreateWordNoteResponse,
@@ -28,7 +29,7 @@ import type {
   WordNoteMode,
 } from "../shared/types";
 
-type FeatureKey = "subtitle-match" | "word-note";
+type FeatureKey = "subtitle-match" | "word-note" | "remote-sync";
 type WordAddStatus = "idle" | "adding" | "added" | "failed";
 
 const STORAGE_KEYS = {
@@ -550,6 +551,17 @@ export function App() {
     }
   }
 
+  async function handleOpenWordNoteFromRemote(folderPath: string) {
+    const targetPath = folderPath.trim();
+    if (!targetPath) {
+      return;
+    }
+    setActiveFeature("word-note");
+    setWordImageFolderPath(targetPath);
+    localStorage.setItem(STORAGE_KEYS.wordImageFolderPath, targetPath);
+    await handleScanWordImages(targetPath, true);
+  }
+
   function mergeVideo(video: VideoItem) {
     setVideos((current) => current.map((item) => (item.fullPath === video.fullPath ? video : item)));
   }
@@ -604,6 +616,13 @@ export function App() {
           onClick={() => setActiveFeature("word-note")}
         >
           单词摘记
+        </button>
+        <button
+          className={activeFeature === "remote-sync" ? "nav-button active" : "nav-button"}
+          type="button"
+          onClick={() => setActiveFeature("remote-sync")}
+        >
+          远程同步
         </button>
       </aside>
 
@@ -777,7 +796,7 @@ export function App() {
               )}
             </section>
           </main>
-        ) : (
+        ) : activeFeature === "word-note" ? (
           <main className="layout">
             <section className="control-card">
               <div className="section-title-row">
@@ -954,6 +973,8 @@ export function App() {
               )}
             </section>
           </main>
+        ) : (
+          <RemoteSyncPage onOpenWordNoteForFolder={(folderPath) => void handleOpenWordNoteFromRemote(folderPath)} />
         )}
       </div>
 

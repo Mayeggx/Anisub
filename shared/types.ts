@@ -219,3 +219,56 @@ export interface CreateAnkiWordCardResponse {
   mediaFileName: string;
   wordNote: WordNoteResult;
 }
+
+export interface RemoteSyncConfig {
+  remoteUrl: string;
+  gitUsername: string;
+  gitToken: string;
+  commitUserName: string;
+  commitUserEmail: string;
+  imageScalePercent: number;
+  imageJpegQuality: number;
+}
+
+export interface RemoteSyncEntry {
+  id: string;
+  displayName: string;
+  deviceId: string;
+  deviceName: string;
+  repoPath: string;
+  updatedAt: number;
+  folderPath: string | null;
+  folderLabel: string | null;
+  folderFileCount: number | null;
+  wordNoteFolderPath: string | null;
+}
+
+export interface RemoteSyncStateResponse {
+  config: RemoteSyncConfig;
+  entries: RemoteSyncEntry[];
+  statusMessage: string;
+  deviceId: string;
+  deviceName: string;
+  repoPath: string;
+  headSummary: string;
+  gitLogs: string[];
+}
+
+export interface SaveRemoteSyncConfigRequest {
+  config: RemoteSyncConfig;
+}
+
+export interface UpdateRemoteSyncImageCompressionRequest {
+  scalePercent: number;
+  jpegQuality: number;
+}
+
+export interface CreateRemoteSyncEntryRequest {
+  displayName: string;
+  folderPath: string;
+  folderLabel?: string;
+}
+
+export interface RemoteSyncEntryActionRequest {
+  entryId: string;
+}

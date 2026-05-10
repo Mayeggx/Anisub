@@ -17,11 +17,16 @@ import {
   PickFolderResponse,
   PlayVideoRequest,
   PlayVideoResponse,
+  RemoteSyncEntryActionRequest,
+  RemoteSyncStateResponse,
   ScanImageFolderRequest,
   ScanImageFolderResponse,
   ScanFolderRequest,
   ScanFolderResponse,
+  SaveRemoteSyncConfigRequest,
   WordNoteConfigResponse,
+  UpdateRemoteSyncImageCompressionRequest,
+  CreateRemoteSyncEntryRequest,
 } from "../shared/types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -125,6 +130,72 @@ export function createAnkiWordCard(body: CreateAnkiWordCardRequest): Promise<Cre
 
 export function openWordNoteLog(): Promise<OpenWordNoteLogResponse> {
   return request("/api/open-word-note-log", {
+    method: "POST",
+  });
+}
+
+export function fetchRemoteSyncState(): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/state");
+}
+
+export function refreshRemoteSyncEntries(): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/refresh", {
+    method: "POST",
+  });
+}
+
+export function saveRemoteSyncConfig(body: SaveRemoteSyncConfigRequest): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/config", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateRemoteSyncImageCompression(
+  body: UpdateRemoteSyncImageCompressionRequest,
+): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/image-compression", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function createRemoteSyncEntry(body: CreateRemoteSyncEntryRequest): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/create-entry", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function remoteSyncPull(): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/pull", {
+    method: "POST",
+  });
+}
+
+export function remoteSyncPush(body: RemoteSyncEntryActionRequest): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/push", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function remoteSyncClear(body: RemoteSyncEntryActionRequest): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/clear", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function remoteSyncDelete(body: RemoteSyncEntryActionRequest): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/delete", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function clearRemoteSyncLogs(): Promise<RemoteSyncStateResponse> {
+  return request("/api/remote-sync/clear-logs", {
     method: "POST",
   });
 }

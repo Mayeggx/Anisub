@@ -6,6 +6,7 @@ import { stat } from "node:fs/promises";
 import {
   CreateAnkiWordCardRequest,
   CreateAnkiWordCardResponse,
+  CreateRemoteSyncEntryRequest,
   CreateWordNoteRequest,
   CreateWordNoteResponse,
   DownloadCandidateRequest,
@@ -20,6 +21,9 @@ import {
   OffsetSubtitleResponse,
   OpenFolderRequest,
   OpenFolderResponse,
+  RemoteSyncEntryActionRequest,
+  RemoteSyncStateResponse,
+  SaveRemoteSyncConfigRequest,
   PickFolderResponse,
   PlayVideoRequest,
   PlayVideoResponse,
@@ -28,6 +32,7 @@ import {
   ScanFolderRequest,
   ScanFolderResponse,
   SubtitleSource,
+  UpdateRemoteSyncImageCompressionRequest,
   WordNoteConfigResponse,
 } from "../shared/types";
 import { AppError, toErrorMessage } from "./errors";
@@ -44,10 +49,12 @@ import { listWordCardLogRecords, upsertWordCardLogRecord } from "./word-card-log
 import { appendWordNoteMarkdownLog, ensureWordNoteMarkdownLogFile, getWordNoteMarkdownLogPath } from "./word-note-md-log";
 import { getWordNoteConfigPath, readWordNoteConfig } from "./word-note-config";
 import { createWordNote } from "./word-note";
+import { RemoteSyncService } from "./remote-sync";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
 const logStore = new LogStore();
+const remoteSyncService = new RemoteSyncService();
 const matchers = new Map<SubtitleSource, SubtitleMatcher>([
   ["jimaku", new JimakuSubtitleMatcher()],
   ["edatribe", new EdatribeSubtitleMatcher()],
@@ -324,6 +331,127 @@ app.post("/api/open-word-note-log", async (_request, response, next) => {
     await ensureWordNoteMarkdownLogFile();
     const openedPath = await openTextFile(logPath);
     const payload: OpenWordNoteLogResponse = { openedPath };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/remote-sync/state", async (_request, response, next) => {
+  try {
+    const payload: RemoteSyncStateResponse = await remoteSyncService.getState();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/refresh", async (_request, response, next) => {
+  try {
+    const payload: RemoteSyncStateResponse = await remoteSyncService.refreshEntries();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/config", async (request, response, next) => {
+  try {
+    const body = request.body as SaveRemoteSyncConfigRequest;
+    if (!body?.config) {
+      throw new AppError("Missing remote sync config.", 400);
+    }
+    const payload: RemoteSyncStateResponse = await remoteSyncService.saveConfig(body.config);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/image-compression", async (request, response, next) => {
+  try {
+    const body = request.body as UpdateRemoteSyncImageCompressionRequest;
+    if (!Number.isFinite(body?.scalePercent) || !Number.isFinite(body?.jpegQuality)) {
+      throw new AppError("Invalid image compression settings.", 400);
+    }
+    const payload: RemoteSyncStateResponse = await remoteSyncService.updateImageCompression(
+      Math.trunc(body.scalePercent),
+      Math.trunc(body.jpegQuality),
+    );
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/create-entry", async (request, response, next) => {
+  try {
+    const body = request.body as CreateRemoteSyncEntryRequest;
+    if (!body?.folderPath?.trim()) {
+      throw new AppError("Missing folder path.", 400);
+    }
+    const payload: RemoteSyncStateResponse = await remoteSyncService.createEntry({
+      displayName: body.displayName ?? "",
+      folderPath: body.folderPath,
+      folderLabel: body.folderLabel,
+    });
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/pull", async (_request, response, next) => {
+  try {
+    const payload: RemoteSyncStateResponse = await remoteSyncService.pull();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/push", async (request, response, next) => {
+  try {
+    const body = request.body as RemoteSyncEntryActionRequest;
+    if (!body?.entryId) {
+      throw new AppError("Missing entry ID.", 400);
+    }
+    const payload: RemoteSyncStateResponse = await remoteSyncService.push(body.entryId);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/clear", async (request, response, next) => {
+  try {
+    const body = request.body as RemoteSyncEntryActionRequest;
+    if (!body?.entryId) {
+      throw new AppError("Missing entry ID.", 400);
+    }
+    const payload: RemoteSyncStateResponse = await remoteSyncService.clear(body.entryId);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/delete", async (request, response, next) => {
+  try {
+    const body = request.body as RemoteSyncEntryActionRequest;
+    if (!body?.entryId) {
+      throw new AppError("Missing entry ID.", 400);
+    }
+    const payload: RemoteSyncStateResponse = await remoteSyncService.delete(body.entryId);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/remote-sync/clear-logs", async (_request, response, next) => {
+  try {
+    const payload: RemoteSyncStateResponse = await remoteSyncService.clearGitLogs();
     response.json(payload);
   } catch (error) {
     next(error);
