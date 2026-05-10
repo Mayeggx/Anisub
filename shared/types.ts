@@ -187,6 +187,10 @@ export interface OpenConfigFileResponse {
   openedPath: string;
 }
 
+export interface OpenWordNoteLogResponse {
+  openedPath: string;
+}
+
 export interface CreateAnkiWordCardRequest {
   imagePath: string;
   subtitle: string;

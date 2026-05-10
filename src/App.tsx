@@ -7,6 +7,7 @@ import {
   fetchWordNoteConfig,
   matchVideo,
   openFolder,
+  openWordNoteLog,
   openWordNoteConfig,
   pickFolder,
   playVideo,
@@ -27,6 +28,7 @@ import type {
 } from "../shared/types";
 
 type FeatureKey = "subtitle-match" | "word-note";
+type WordAddStatus = "idle" | "adding" | "added" | "failed";
 
 const STORAGE_KEYS = {
   folderPath: "anisub.folderPath",
@@ -70,6 +72,7 @@ export function App() {
   const [wordImages, setWordImages] = useState<ImageItem[]>([]);
   const [wordInputs, setWordInputs] = useState<Record<string, string>>({});
   const [wordSelected, setWordSelected] = useState<Record<string, boolean>>({});
+  const [wordAddStatusByPath, setWordAddStatusByPath] = useState<Record<string, WordAddStatus>>({});
   const [wordMode, setWordMode] = useState<WordNoteMode>(
     () => (localStorage.getItem(STORAGE_KEYS.wordNoteMode) as WordNoteMode | null) ?? "auto",
   );
@@ -224,6 +227,13 @@ export function App() {
         }
         return next;
       });
+      setWordAddStatusByPath(() => {
+        const next: Record<string, WordAddStatus> = {};
+        for (const image of payload.images) {
+          next[image.fullPath] = image.added ? "added" : "idle";
+        }
+        return next;
+      });
 
       setWordStatus(payload.images.length === 0 ? "当前目录没有识别到图片文件。" : `已加载 ${payload.images.length} 张图片。`);
     } catch (error) {
@@ -326,10 +336,13 @@ export function App() {
 
     try {
       setWordBusyPath(image.fullPath);
+      setWordAddStatusByPath((current) => ({ ...current, [image.fullPath]: "adding" }));
       setWordStatus(`正在创建 Anki 卡片：${image.fileName} ...`);
       const payload = await submitAnkiCard(image, targetWord);
+      setWordAddStatusByPath((current) => ({ ...current, [image.fullPath]: "added" }));
       setWordStatus(buildCardSuccessMessage(payload, image.fileName));
     } catch (error) {
+      setWordAddStatusByPath((current) => ({ ...current, [image.fullPath]: "failed" }));
       setWordStatus(error instanceof Error ? error.message : "创建 Anki 卡片失败。");
     } finally {
       setWordBusyPath(null);
@@ -356,9 +369,16 @@ export function App() {
       for (const image of selectedItems) {
         const targetWord = (wordInputs[image.fullPath] ?? "").trim();
         setWordBusyPath(image.fullPath);
+        setWordAddStatusByPath((current) => ({ ...current, [image.fullPath]: "adding" }));
         setWordStatus(`正在批量创建：${image.fileName} ...`);
-        await submitAnkiCard(image, targetWord);
-        successCount += 1;
+        try {
+          await submitAnkiCard(image, targetWord);
+          setWordAddStatusByPath((current) => ({ ...current, [image.fullPath]: "added" }));
+          successCount += 1;
+        } catch (error) {
+          setWordAddStatusByPath((current) => ({ ...current, [image.fullPath]: "failed" }));
+          throw error;
+        }
       }
       setWordStatus(`批量添加完成，成功 ${successCount} / ${selectedItems.length} 条。`);
     } catch (error) {
@@ -376,6 +396,15 @@ export function App() {
       setWordStatus("已打开配置文件，请保存后点击“刷新配置”。");
     } catch (error) {
       setWordStatus(error instanceof Error ? error.message : "打开配置文件失败。");
+    }
+  }
+
+  async function handleOpenWordNoteLog() {
+    try {
+      const payload = await openWordNoteLog();
+      setWordStatus(`已打开日志文件：${payload.openedPath}`);
+    } catch (error) {
+      setWordStatus(error instanceof Error ? error.message : "打开日志文件失败。");
     }
   }
 
@@ -626,6 +655,7 @@ export function App() {
                 <div className="word-image-list">
                   {wordImages.map((image) => {
                     const busy = wordBusyPath === image.fullPath || wordBatchBusy;
+                    const addStatus = wordAddStatusByPath[image.fullPath] ?? (image.added ? "added" : "idle");
                     return (
                       <article className="word-image-card" key={image.fullPath}>
                         <label className="word-image-check">
@@ -647,8 +677,12 @@ export function App() {
                           alt={image.fileName}
                         />
                         <div className="word-image-main">
-                          <h3 title={image.fileName}>{image.fileName}{image.added ? "（已添加）" : ""}</h3>
-                          <p>{image.subtitleText}</p>
+                          <h3 title={image.fileName}>
+                            {addStatus === "adding" ? <span className="word-add-tag adding">[添加中]</span> : null}
+                            {addStatus === "added" ? <span className="word-add-tag added">[已添加]</span> : null}
+                            {addStatus === "failed" ? <span className="word-add-tag failed">[添加失败]</span> : null}
+                            {image.fileName}
+                          </h3>
                           <div className="word-image-actions">
                             <input
                               className="text-input"
@@ -732,6 +766,12 @@ export function App() {
           disabled={selectedCount === 0 || wordBatchBusy}
         >
           {wordBatchBusy ? "批量添加中..." : `批量添加 (${selectedCount})`}
+        </button>
+      ) : null}
+
+      {activeFeature === "word-note" ? (
+        <button className="log-fab" type="button" onClick={() => void handleOpenWordNoteLog()}>
+          查看日志
         </button>
       ) : null}
 

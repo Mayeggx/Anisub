@@ -9,6 +9,7 @@ import {
   MatchVideoRequest,
   MatchVideoResponse,
   OpenConfigFileResponse,
+  OpenWordNoteLogResponse,
   OpenFolderRequest,
   OpenFolderResponse,
   PickFolderResponse,
@@ -110,5 +111,11 @@ export function createAnkiWordCard(body: CreateAnkiWordCardRequest): Promise<Cre
   return request("/api/create-anki-word-card", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export function openWordNoteLog(): Promise<OpenWordNoteLogResponse> {
+  return request("/api/open-word-note-log", {
+    method: "POST",
   });
 }

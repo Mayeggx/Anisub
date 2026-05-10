@@ -1,8 +1,7 @@
 # Anisub
 
 Anisub 是一个基于 TypeScript 的本地桌面工具（Web UI + 本地 API），目前包含两个核心功能：
-
-1. 字幕匹配：扫描视频目录并从字幕站点匹配下载字幕  
+1. 字幕匹配：扫描视频目录并从字幕站点匹配下载字幕
 2. 单词摘记：加载字幕截图，调用大模型生成词条信息，并写入 Anki
 
 ## 功能概览
@@ -19,19 +18,22 @@ Anisub 是一个基于 TypeScript 的本地桌面工具（Web UI + 本地 API）
 
 ### 2) 单词摘记（参考 PicSubToAnki）
 
-- 先选择图片文件夹并加载全部图片列表
-- 使用“文件名去扩展名”作为字幕句子
+- 选择图片文件夹并加载全部图片列表
+- 使用“文件名（去扩展名）”作为字幕句子
 - 每条可输入目标单词后创建 Anki 卡片
 - 支持勾选条目后“批量添加”（右下角悬浮按钮）
 - 已添加条目会显示“（已添加）”
+- 摘记详情不再直接显示在页面上，而是追加写入本地日志文件 `./.anisub/word-note-log.md`
+- 单词摘记页面左下角提供“查看日志”悬浮按钮，可直接打开该 `md` 文件
+- 图片条目仅显示标题（不再显示第二行灰色字幕信息）
 - 配置来自本地 `config.ini`，前端可一键打开配置文件
 
-## 配置文件
+## 配置与日志文件
 
 首次启动后会自动创建：
-
 - `./.anisub/config.ini`
-- `./.anisub/word-card-log.json`（单词摘记添加状态记录）
+- `./.anisub/word-card-log.json`（单词摘记“已添加”状态记录）
+- `./.anisub/word-note-log.md`（单词摘记结果日志，按时间追加）
 
 其中 `config.ini` 字段与 PicSubToAnki 对齐：
 
@@ -42,7 +44,7 @@ base_url = https://dashscope.aliyuncs.com/compatible-mode/v1
 model_name = qwen-plus
 
 [anki]
-jp_deck = 日本語::エンタメ::テレビアニメーション
+jp_deck = 日本語::アンキヘルパー::テレビアニメーション
 en_deck = English Vocabulary::A English Daily
 model_name = 划词助手Antimoon模板
 word_field = 单词
@@ -61,8 +63,9 @@ image_quality = 60
 1. 调用 LLM 生成结构化词条（单词/音标/释义/例句/笔记）
 2. 按 `max_width/max_height/image_quality` 压缩图片并转 JPG
 3. 通过 AnkiConnect `storeMediaFile` 上传图片
-4. 用 `findNotes + notesInfo` 查重
+4. 通过 `findNotes + notesInfo` 查重
 5. 已存在则 `updateNoteFields`，否则 `addNote`
+6. 将本次结果追加写入 `./.anisub/word-note-log.md`
 
 > 需要本机运行 Anki 且安装并启用 AnkiConnect（默认端口 `8765`）。
 
@@ -81,7 +84,6 @@ npm run dev
 ```
 
 访问地址：
-
 - Web UI: `http://localhost:5173`
 - API: `http://localhost:8787`
 
@@ -95,11 +97,11 @@ npm start
 ## 目录结构
 
 - `src/`：前端页面
-- `server/`：本地 API、字幕匹配、图片扫描、Anki 制卡
+- `server/`：本地 API、字幕匹配、图片扫描、Anki 制卡、日志写入
 - `shared/`：前后端共享类型
 - `.anisub/`：运行时配置与日志
 
 ## 当前限制
 
-- 目录选择器与配置文件打开目前仅支持 Windows
+- 目录选择器与配置文件/日志打开目前仅支持 Windows
 - 字幕匹配仍为启发式逻辑，极端命名场景可能误匹配

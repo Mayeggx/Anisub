@@ -11,6 +11,7 @@ import {
   DownloadCandidateRequest,
   DownloadCandidateResponse,
   OpenConfigFileResponse,
+  OpenWordNoteLogResponse,
   LogsResponse,
   MatchLogItem,
   MatchVideoRequest,
@@ -37,6 +38,7 @@ import { DesktopVideoContext, SubtitleMatcher } from "./subtitle-matcher";
 import { getVideoByPath, scanVideoFolder } from "./video-library";
 import { openFolderInExplorer, openTextFile, openVideoInPlayer, pickFolder } from "./windows-picker";
 import { listWordCardLogRecords, upsertWordCardLogRecord } from "./word-card-log";
+import { appendWordNoteMarkdownLog, ensureWordNoteMarkdownLogFile, getWordNoteMarkdownLogPath } from "./word-note-md-log";
 import { getWordNoteConfigPath, readWordNoteConfig } from "./word-note-config";
 import { createWordNote } from "./word-note";
 
@@ -250,6 +252,12 @@ app.post("/api/create-anki-word-card", async (request, response, next) => {
       noteId: payload.noteId,
       updatedAt: new Date().toISOString(),
     });
+    await appendWordNoteMarkdownLog({
+      imagePath: body.imagePath,
+      subtitle: body.subtitle,
+      targetWord: body.targetWord,
+      result: payload,
+    });
     response.json(payload);
   } catch (error) {
     next(error);
@@ -279,6 +287,18 @@ app.post("/api/open-word-note-config", async (_request, response, next) => {
     }
     const openedPath = await openTextFile(configPath);
     const payload: OpenConfigFileResponse = { openedPath };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/open-word-note-log", async (_request, response, next) => {
+  try {
+    const logPath = getWordNoteMarkdownLogPath();
+    await ensureWordNoteMarkdownLogFile();
+    const openedPath = await openTextFile(logPath);
+    const payload: OpenWordNoteLogResponse = { openedPath };
     response.json(payload);
   } catch (error) {
     next(error);
