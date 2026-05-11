@@ -144,7 +144,9 @@ app.get("/api/image-file", async (request, response, next) => {
     if (!(await isSupportedImageFile(imagePath))) {
       throw new AppError("Unsupported or missing image file.", 404);
     }
-    response.sendFile(imagePath);
+    response.sendFile(imagePath, {
+      dotfiles: "allow",
+    });
   } catch (error) {
     next(error);
   }
