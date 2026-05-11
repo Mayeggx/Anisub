@@ -16,6 +16,7 @@ import {
   scanImageFolder,
 } from "./api";
 import { RemoteSyncPage } from "./RemoteSyncPage";
+import { SeedDownloadPage } from "./SeedDownloadPage";
 import type {
   CreateAnkiWordCardResponse,
   CreateWordNoteResponse,
@@ -29,7 +30,7 @@ import type {
   WordNoteMode,
 } from "../shared/types";
 
-type FeatureKey = "subtitle-match" | "word-note" | "remote-sync";
+type FeatureKey = "subtitle-match" | "word-note" | "remote-sync" | "seed-download";
 type WordAddStatus = "idle" | "adding" | "added" | "failed";
 
 const STORAGE_KEYS = {
@@ -681,6 +682,13 @@ export function App() {
           单词摘记
         </button>
         <button
+          className={activeFeature === "seed-download" ? "nav-button active" : "nav-button"}
+          type="button"
+          onClick={() => setActiveFeature("seed-download")}
+        >
+          种子下载
+        </button>
+        <button
           className={activeFeature === "remote-sync" ? "nav-button active" : "nav-button"}
           type="button"
           onClick={() => setActiveFeature("remote-sync")}
@@ -1046,8 +1054,10 @@ export function App() {
               )}
             </section>
           </main>
-        ) : (
+        ) : activeFeature === "remote-sync" ? (
           <RemoteSyncPage onOpenWordNoteForFolder={(folderPath) => void handleOpenWordNoteFromRemote(folderPath)} />
+        ) : (
+          <SeedDownloadPage />
         )}
       </div>
 

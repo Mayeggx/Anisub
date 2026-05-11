@@ -1,8 +1,11 @@
 import {
+  AddSeedSubscriptionRequest,
   CreateAnkiWordCardRequest,
   CreateAnkiWordCardResponse,
   CreateWordNoteRequest,
   CreateWordNoteResponse,
+  DownloadSeedTorrentRequest,
+  DownloadSeedTorrentResponse,
   DownloadCandidateRequest,
   DownloadCandidateResponse,
   LogsResponse,
@@ -11,14 +14,22 @@ import {
   OffsetSubtitleRequest,
   OffsetSubtitleResponse,
   OpenConfigFileResponse,
+  OpenSeedTorrentRequest,
+  OpenSeedTorrentResponse,
   OpenWordNoteLogResponse,
   OpenFolderRequest,
   OpenFolderResponse,
   PickFolderResponse,
   PlayVideoRequest,
   PlayVideoResponse,
+  RemoveSeedSubscriptionRequest,
   RemoteSyncEntryActionRequest,
   RemoteSyncStateResponse,
+  SeedDownloadEntriesRequest,
+  SeedDownloadEntriesResponse,
+  SeedDownloadMutationResponse,
+  SeedDownloadSubscriptionsResponse,
+  SeedDownloadSyncResponse,
   ScanImageFolderRequest,
   ScanImageFolderResponse,
   ScanFolderRequest,
@@ -203,5 +214,56 @@ export function remoteSyncDelete(body: RemoteSyncEntryActionRequest): Promise<Re
 export function clearRemoteSyncLogs(): Promise<RemoteSyncStateResponse> {
   return request("/api/remote-sync/clear-logs", {
     method: "POST",
+  });
+}
+
+export function fetchSeedSubscriptions(): Promise<SeedDownloadSubscriptionsResponse> {
+  return request("/api/seed-download/subscriptions");
+}
+
+export function addSeedSubscription(body: AddSeedSubscriptionRequest): Promise<SeedDownloadMutationResponse> {
+  return request("/api/seed-download/add-subscription", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function removeSeedSubscription(body: RemoveSeedSubscriptionRequest): Promise<SeedDownloadMutationResponse> {
+  return request("/api/seed-download/remove-subscription", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function pullSeedSubscriptions(): Promise<SeedDownloadSyncResponse> {
+  return request("/api/seed-download/pull-subscriptions", {
+    method: "POST",
+  });
+}
+
+export function pushSeedSubscriptions(): Promise<SeedDownloadSyncResponse> {
+  return request("/api/seed-download/push-subscriptions", {
+    method: "POST",
+  });
+}
+
+export function fetchSeedSubscriptionEntries(body: SeedDownloadEntriesRequest): Promise<SeedDownloadEntriesResponse> {
+  return request("/api/seed-download/entries", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function downloadSeedTorrent(body: DownloadSeedTorrentRequest): Promise<DownloadSeedTorrentResponse> {
+  return request("/api/seed-download/download-torrent", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function openSeedTorrent(body: OpenSeedTorrentRequest): Promise<OpenSeedTorrentResponse> {
+  return request("/api/seed-download/open-torrent", {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }

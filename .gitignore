@@ -29,3 +29,8 @@ Desktop.ini
 # temporary files
 *.tmp
 *.temp
+.tmp-server-log.txt
+.tmp-server-err.txt
+.tmp-seed-server-log.txt
+.tmp-seed-server-out.txt
+.tmp-seed-server-err.txt

@@ -273,3 +273,76 @@ export interface CreateRemoteSyncEntryRequest {
 export interface RemoteSyncEntryActionRequest {
   entryId: string;
 }
+
+export interface SeedSubscriptionItem {
+  id: string;
+  label: string;
+  url: string;
+  folderName: string;
+  downloadedCount: number;
+}
+
+export interface SeedTorrentEntryItem {
+  id: string;
+  title: string;
+  sizeText: string;
+  uploadText: string;
+  downloadUrl: string;
+  localFilePath: string | null;
+}
+
+export interface SeedDownloadSubscriptionsResponse {
+  subscriptions: SeedSubscriptionItem[];
+}
+
+export interface SeedDownloadMutationResponse {
+  subscriptions: SeedSubscriptionItem[];
+  message: string;
+}
+
+export interface AddSeedSubscriptionRequest {
+  url: string;
+}
+
+export interface RemoveSeedSubscriptionRequest {
+  id: string;
+}
+
+export interface SeedDownloadEntriesRequest {
+  subscriptionId: string;
+}
+
+export interface SeedDownloadEntriesResponse {
+  subscription: SeedSubscriptionItem;
+  entries: SeedTorrentEntryItem[];
+  message: string;
+}
+
+export interface DownloadSeedTorrentRequest {
+  subscriptionId: string;
+  entryId: string;
+  downloadUrl: string;
+}
+
+export interface DownloadSeedTorrentResponse {
+  entryId: string;
+  localFilePath: string;
+  subscriptions: SeedSubscriptionItem[];
+  message: string;
+}
+
+export interface OpenSeedTorrentRequest {
+  filePath: string;
+}
+
+export interface OpenSeedTorrentResponse {
+  openedPath: string;
+  message: string;
+}
+
+export interface SeedDownloadSyncResponse {
+  fileFound: boolean;
+  syncedCount: number;
+  subscriptions: SeedSubscriptionItem[];
+  message: string;
+}

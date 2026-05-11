@@ -1,5 +1,27 @@
 # Anisub
 
+## Seed Download (Anisubroid Compatible)
+
+Anisub now includes a Seed Download page compatible with the Anisubroid seed-sync format.
+
+- Sync file: `seed-subscriptions.json` at repository root.
+- Supported pull formats:
+  - `{ "entries": [{ "url": "..." }] }`
+  - `{ "urls": [{ "url": "..." }] }`
+  - JSON array of strings or objects with `url`.
+- Uses the same remote-sync repo/config base:
+  - `./.anisub/remote-sync/repo-a`
+  - `./.anisub/remote-sync/config.json`
+- Network robustness:
+  - request timeout + retry
+  - nyaa mirror fallback
+  - clearer error messages instead of generic `fetch failed`.
+
+UI update for subscription cards:
+- removed `Local status: Not downloaded`
+- removed `View Entries` button
+- subscription URL is highlighted and clickable (opens in a new tab).
+
 Anisub 是一个基于 TypeScript 的本地桌面工具（Web UI + 本地 API），目前包含三大核心功能：
 
 1. 字幕匹配：扫描视频目录并从字幕站点匹配下载字幕

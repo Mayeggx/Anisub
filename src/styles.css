@@ -632,6 +632,18 @@ code {
   overflow-wrap: anywhere;
 }
 
+.seed-subscription-link {
+  display: inline-block;
+  color: #72b7ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.seed-subscription-link:hover {
+  color: #9fceff;
+}
+
 .remote-entry-head {
   display: flex;
   justify-content: space-between;

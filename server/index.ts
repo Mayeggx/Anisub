@@ -6,12 +6,17 @@ import { stat } from "node:fs/promises";
 import {
   CreateAnkiWordCardRequest,
   CreateAnkiWordCardResponse,
+  AddSeedSubscriptionRequest,
   CreateRemoteSyncEntryRequest,
   CreateWordNoteRequest,
   CreateWordNoteResponse,
+  DownloadSeedTorrentRequest,
+  DownloadSeedTorrentResponse,
   DownloadCandidateRequest,
   DownloadCandidateResponse,
   OpenConfigFileResponse,
+  OpenSeedTorrentRequest,
+  OpenSeedTorrentResponse,
   OpenWordNoteLogResponse,
   LogsResponse,
   MatchLogItem,
@@ -24,9 +29,15 @@ import {
   RemoteSyncEntryActionRequest,
   RemoteSyncStateResponse,
   SaveRemoteSyncConfigRequest,
+  SeedDownloadEntriesRequest,
+  SeedDownloadEntriesResponse,
+  SeedDownloadMutationResponse,
+  SeedDownloadSubscriptionsResponse,
+  SeedDownloadSyncResponse,
   PickFolderResponse,
   PlayVideoRequest,
   PlayVideoResponse,
+  RemoveSeedSubscriptionRequest,
   ScanImageFolderRequest,
   ScanImageFolderResponse,
   ScanFolderRequest,
@@ -50,11 +61,13 @@ import { appendWordNoteMarkdownLog, ensureWordNoteMarkdownLogFile, getWordNoteMa
 import { getWordNoteConfigPath, readWordNoteConfig } from "./word-note-config";
 import { createWordNote } from "./word-note";
 import { RemoteSyncService } from "./remote-sync";
+import { SeedDownloadService } from "./seed-download";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
 const logStore = new LogStore();
 const remoteSyncService = new RemoteSyncService();
+const seedDownloadService = new SeedDownloadService();
 const matchers = new Map<SubtitleSource, SubtitleMatcher>([
   ["jimaku", new JimakuSubtitleMatcher()],
   ["edatribe", new EdatribeSubtitleMatcher()],
@@ -454,6 +467,83 @@ app.post("/api/remote-sync/delete", async (request, response, next) => {
 app.post("/api/remote-sync/clear-logs", async (_request, response, next) => {
   try {
     const payload: RemoteSyncStateResponse = await remoteSyncService.clearGitLogs();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/seed-download/subscriptions", async (_request, response, next) => {
+  try {
+    const payload: SeedDownloadSubscriptionsResponse = await seedDownloadService.listSubscriptions();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/add-subscription", async (request, response, next) => {
+  try {
+    const body = request.body as AddSeedSubscriptionRequest;
+    const payload: SeedDownloadMutationResponse = await seedDownloadService.addSubscription(body);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/remove-subscription", async (request, response, next) => {
+  try {
+    const body = request.body as RemoveSeedSubscriptionRequest;
+    const payload: SeedDownloadMutationResponse = await seedDownloadService.removeSubscription(body);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/pull-subscriptions", async (_request, response, next) => {
+  try {
+    const payload: SeedDownloadSyncResponse = await seedDownloadService.pullSubscriptionConfig();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/push-subscriptions", async (_request, response, next) => {
+  try {
+    const payload: SeedDownloadSyncResponse = await seedDownloadService.pushSubscriptionConfig();
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/entries", async (request, response, next) => {
+  try {
+    const body = request.body as SeedDownloadEntriesRequest;
+    const payload: SeedDownloadEntriesResponse = await seedDownloadService.listEntries(body);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/download-torrent", async (request, response, next) => {
+  try {
+    const body = request.body as DownloadSeedTorrentRequest;
+    const payload: DownloadSeedTorrentResponse = await seedDownloadService.downloadTorrent(body);
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/seed-download/open-torrent", async (request, response, next) => {
+  try {
+    const body = request.body as OpenSeedTorrentRequest;
+    const payload: OpenSeedTorrentResponse = await seedDownloadService.openTorrentFile(body.filePath ?? "");
     response.json(payload);
   } catch (error) {
     next(error);
