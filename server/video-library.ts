@@ -4,6 +4,7 @@ import { readdir, stat } from "node:fs/promises";
 import { VideoItem } from "../shared/types";
 import { SUBTITLE_EXTENSIONS, SUBTITLE_PRIORITY, VIDEO_EXTENSIONS } from "./constants";
 import { AppError } from "./errors";
+import { videoPlaybackStatusStore } from "./video-playback-status-store";
 
 export async function scanVideoFolder(folderPath: string): Promise<VideoItem[]> {
   const normalized = path.resolve(folderPath);
@@ -14,24 +15,31 @@ export async function scanVideoFolder(folderPath: string): Promise<VideoItem[]> 
 
   const entries = await readdir(normalized, { withFileTypes: true });
   const subtitleMap = await buildSubtitleMap(normalized);
-
-  const videos = entries
+  const videoEntries = entries
     .filter((entry) => entry.isFile())
     .filter((entry) => VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-    .map((entry) => {
-      const fullPath = path.join(normalized, entry.name);
-      const key = normalizeBaseName(entry.name);
-      const subtitlePath = subtitleMap.get(key);
-      return {
-        fileName: entry.name,
-        fullPath,
-        folderPath: normalized,
-        hasSubtitle: Boolean(subtitlePath),
-        subtitlePath,
-        subtitleStatus: subtitlePath ? "已存在对应字幕" : "未匹配字幕",
-      } satisfies VideoItem;
-    });
+    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+  const playbackStatuses = await videoPlaybackStatusStore.listStatuses(
+    videoEntries.map((entry) => path.join(normalized, entry.name)),
+  );
+  const playbackStatusMap = new Map(
+    playbackStatuses.map((item) => [path.resolve(item.videoPath).toLowerCase(), item.playbackStatus]),
+  );
+
+  const videos = videoEntries.map((entry) => {
+    const fullPath = path.join(normalized, entry.name);
+    const key = normalizeBaseName(entry.name);
+    const subtitlePath = subtitleMap.get(key);
+    return {
+      fileName: entry.name,
+      fullPath,
+      folderPath: normalized,
+      hasSubtitle: Boolean(subtitlePath),
+      subtitlePath,
+      subtitleStatus: subtitlePath ? "已匹配" : "未匹配",
+      playbackStatus: playbackStatusMap.get(fullPath.toLowerCase()) ?? "未播放",
+    } satisfies VideoItem;
+  });
 
   return videos;
 }
@@ -47,6 +55,7 @@ export async function getVideoByPath(videoPath: string): Promise<VideoItem> {
   const subtitleMap = await buildSubtitleMap(folderPath);
   const fileName = path.basename(normalized);
   const subtitlePath = subtitleMap.get(normalizeBaseName(fileName));
+  const playbackStatus = await videoPlaybackStatusStore.getStatus(normalized);
 
   return {
     fileName,
@@ -54,7 +63,8 @@ export async function getVideoByPath(videoPath: string): Promise<VideoItem> {
     folderPath,
     hasSubtitle: Boolean(subtitlePath),
     subtitlePath,
-    subtitleStatus: subtitlePath ? "已存在对应字幕" : "未匹配字幕",
+    subtitleStatus: subtitlePath ? "已匹配" : "未匹配",
+    playbackStatus,
   };
 }
 

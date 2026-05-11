@@ -1,5 +1,6 @@
 export type SubtitleSource = "jimaku" | "edatribe";
 export type MatchMode = "auto" | "candidate";
+export type VideoPlaybackStatus = "未播放" | "播放过" | "已播放";
 
 export interface VideoItem {
   fileName: string;
@@ -8,6 +9,7 @@ export interface VideoItem {
   hasSubtitle: boolean;
   subtitlePath?: string;
   subtitleStatus: string;
+  playbackStatus: VideoPlaybackStatus;
 }
 
 export interface SubtitleCandidate {
@@ -136,6 +138,18 @@ export interface PlayVideoRequest {
 export interface PlayVideoResponse {
   videoPath: string;
   playerPath: string;
+  playbackStatus: VideoPlaybackStatus;
+}
+
+export interface FetchVideoPlaybackStatusesRequest {
+  videoPaths: string[];
+}
+
+export interface FetchVideoPlaybackStatusesResponse {
+  statuses: Array<{
+    videoPath: string;
+    playbackStatus: VideoPlaybackStatus;
+  }>;
 }
 
 export type WordNoteMode = "auto" | "jp" | "en";

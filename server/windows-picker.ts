@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import net, { Socket } from "node:net";
 import path from "node:path";
 
+import { VideoPlaybackStatus } from "../shared/types";
 import { AppError } from "./errors";
+import { videoPlaybackStatusStore } from "./video-playback-status-store";
 
 export async function pickFolder(): Promise<string> {
   if (process.platform !== "win32") {
@@ -51,7 +55,7 @@ export async function openFolderInExplorer(targetPath: string): Promise<string> 
   return resolvedPath;
 }
 
-export async function openVideoInPlayer(playerPath: string, videoPath: string): Promise<void> {
+export async function openVideoInPlayer(playerPath: string, videoPath: string): Promise<VideoPlaybackStatus> {
   if (process.platform !== "win32") {
     throw new AppError("Launching a local player is only supported on Windows.", 400);
   }
@@ -68,7 +72,17 @@ export async function openVideoInPlayer(playerPath: string, videoPath: string): 
     throw new AppError("Video file was not found.", 400);
   }
 
-  await spawnDetachedProcess(resolvedPlayerPath, [resolvedVideoPath]);
+  if (!path.basename(resolvedPlayerPath).toLowerCase().includes("mpv")) {
+    throw new AppError("当前仅支持 mpv 播放器（路径需指向 mpv.exe）。", 400);
+  }
+
+  const ipcPath = `\\\\.\\pipe\\anisub-mpv-${randomUUID()}`;
+  await spawnDetachedProcess(resolvedPlayerPath, [`--input-ipc-server=${ipcPath}`, resolvedVideoPath]);
+  const playbackStatus = await videoPlaybackStatusStore.markAsPlayed(resolvedVideoPath);
+  void watchMpvPlayback(ipcPath, resolvedVideoPath).catch((error) => {
+    console.warn("Failed to monitor mpv playback:", error);
+  });
+  return playbackStatus;
 }
 
 export async function openTextFile(targetPath: string): Promise<string> {
@@ -188,5 +202,97 @@ function spawnDetachedProcess(command: string, args: string[]): Promise<void> {
       settled = true;
       reject(new AppError(`Player exited immediately with code ${code ?? "unknown"}.`, 400));
     });
+  });
+}
+
+async function watchMpvPlayback(ipcPath: string, videoPath: string): Promise<void> {
+  const socket = await connectToPipeWithRetry(ipcPath, 80, 100);
+  await monitorMpvSocket(socket, videoPath);
+}
+
+async function monitorMpvSocket(socket: Socket, videoPath: string): Promise<void> {
+  let buffer = "";
+  let endFileHandled = false;
+
+  await new Promise<void>((resolve) => {
+    socket.on("data", (chunk) => {
+      buffer += String(chunk);
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const message = line.trim();
+        if (!message) {
+          continue;
+        }
+        void handleMpvMessage(message);
+      }
+    });
+
+    socket.once("error", () => resolve());
+    socket.once("close", () => resolve());
+
+    async function handleMpvMessage(message: string): Promise<void> {
+      let payload: unknown;
+      try {
+        payload = JSON.parse(message);
+      } catch {
+        return;
+      }
+
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      const event = (payload as { event?: unknown }).event;
+      if (event !== "end-file" || endFileHandled) {
+        return;
+      }
+      endFileHandled = true;
+
+      const reason = (payload as { reason?: unknown }).reason;
+      if (reason === "eof") {
+        await videoPlaybackStatusStore.setStatus(videoPath, "已播放");
+      }
+      socket.end();
+    }
+  });
+}
+
+async function connectToPipeWithRetry(ipcPath: string, attempts: number, delayMs: number): Promise<Socket> {
+  let lastError: unknown = null;
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      return await connectToPipe(ipcPath);
+    } catch (error) {
+      lastError = error;
+      await sleep(delayMs);
+    }
+  }
+  throw new AppError(
+    `Failed to connect to mpv IPC (${ipcPath}): ${
+      lastError instanceof Error ? lastError.message : "unknown error"
+    }`,
+    500,
+  );
+}
+
+function connectToPipe(ipcPath: string): Promise<Socket> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(ipcPath);
+    const handleError = (error: Error) => {
+      socket.destroy();
+      reject(error);
+    };
+    socket.once("error", handleError);
+    socket.once("connect", () => {
+      socket.off("error", handleError);
+      resolve(socket);
+    });
+  });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
 }

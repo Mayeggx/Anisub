@@ -386,7 +386,21 @@ code {
 
 .video-status-row {
   flex-wrap: wrap;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.video-status-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-status-row > code {
+  margin-left: auto;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .badge {
@@ -407,6 +421,16 @@ code {
 .badge-warn {
   background: rgba(255, 210, 127, 0.14);
   color: var(--warn);
+}
+
+.badge-played {
+  background: rgba(114, 183, 255, 0.16);
+  color: var(--accent-cool);
+}
+
+.badge-neutral {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
 }
 
 .word-note-card {
@@ -725,6 +749,11 @@ code {
 
   .section-title-main {
     width: 100%;
+  }
+
+  .video-status-row > code {
+    margin-left: 0;
+    text-align: left;
   }
 
   .section-actions {

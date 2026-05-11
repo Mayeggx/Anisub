@@ -14,6 +14,8 @@ import {
   DownloadSeedTorrentResponse,
   DownloadCandidateRequest,
   DownloadCandidateResponse,
+  FetchVideoPlaybackStatusesRequest,
+  FetchVideoPlaybackStatusesResponse,
   OpenConfigFileResponse,
   OpenSeedTorrentRequest,
   OpenSeedTorrentResponse,
@@ -62,6 +64,7 @@ import { getWordNoteConfigPath, readWordNoteConfig } from "./word-note-config";
 import { createWordNote } from "./word-note";
 import { RemoteSyncService } from "./remote-sync";
 import { SeedDownloadService } from "./seed-download";
+import { videoPlaybackStatusStore } from "./video-playback-status-store";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "8787", 10);
@@ -185,11 +188,27 @@ app.post("/api/play-video", async (request, response, next) => {
     if (!body?.playerPath) {
       throw new AppError("Missing player path.", 400);
     }
-    await openVideoInPlayer(body.playerPath, body.videoPath);
+    const playbackStatus = await openVideoInPlayer(body.playerPath, body.videoPath);
     const payload: PlayVideoResponse = {
       videoPath: path.resolve(body.videoPath),
       playerPath: path.resolve(body.playerPath),
+      playbackStatus,
     };
+    response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/video-playback-statuses", async (request, response, next) => {
+  try {
+    const body = request.body as FetchVideoPlaybackStatusesRequest;
+    if (!Array.isArray(body?.videoPaths)) {
+      throw new AppError("Missing video paths.", 400);
+    }
+    const videoPaths = body.videoPaths.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    const statuses = await videoPlaybackStatusStore.listStatuses(videoPaths);
+    const payload: FetchVideoPlaybackStatusesResponse = { statuses };
     response.json(payload);
   } catch (error) {
     next(error);

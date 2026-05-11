@@ -4,6 +4,7 @@ import {
   createAnkiWordCard,
   downloadCandidate,
   fetchLogs,
+  fetchVideoPlaybackStatuses,
   fetchWordNoteConfig,
   matchVideo,
   offsetSubtitle,
@@ -25,6 +26,7 @@ import type {
   MatchMode,
   SubtitleCandidate,
   SubtitleSource,
+  VideoPlaybackStatus,
   VideoItem,
   WordNoteConfigResponse,
   WordNoteMode,
@@ -147,6 +149,50 @@ export function App() {
     void handleScanWordImages(wordImageFolderPath, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (activeFeature !== "subtitle-match" || videos.length === 0) {
+      return;
+    }
+
+    const videoPaths = videos.map((video) => video.fullPath);
+    void refreshPlaybackStatuses(videoPaths);
+    const timer = window.setInterval(() => {
+      void refreshPlaybackStatuses(videoPaths);
+    }, 2000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [activeFeature, videos]);
+
+  async function refreshPlaybackStatuses(videoPaths = videos.map((video) => video.fullPath)) {
+    if (videoPaths.length === 0) {
+      return;
+    }
+
+    try {
+      const payload = await fetchVideoPlaybackStatuses({ videoPaths });
+      const statusMap = new Map(payload.statuses.map((item) => [item.videoPath.toLowerCase(), item.playbackStatus]));
+      setVideos((current) => {
+        let changed = false;
+        const next = current.map((item) => {
+          const playbackStatus = statusMap.get(item.fullPath.toLowerCase());
+          if (!playbackStatus || playbackStatus === item.playbackStatus) {
+            return item;
+          }
+          changed = true;
+          return {
+            ...item,
+            playbackStatus,
+          };
+        });
+        return changed ? next : current;
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   async function refreshLogs() {
     try {
@@ -284,10 +330,15 @@ export function App() {
     try {
       setPlayingPath(video.fullPath);
       setMessage(`正在使用本地播放器打开 ${video.fileName}...`);
-      await playVideo({
+      const payload = await playVideo({
         videoPath: video.fullPath,
         playerPath: targetPlayerPath,
       });
+      mergeVideo({
+        ...video,
+        playbackStatus: payload.playbackStatus,
+      });
+      void refreshPlaybackStatuses([video.fullPath]);
       setMessage(`已使用 ${targetPlayerPath} 播放 ${video.fileName}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "播放失败。");
@@ -840,7 +891,10 @@ export function App() {
                         </div>
 
                         <div className="video-status-row">
-                          <span className={video.hasSubtitle ? "badge badge-ok" : "badge badge-warn"}>{video.subtitleStatus}</span>
+                          <div className="video-status-badges">
+                            <span className={video.hasSubtitle ? "badge badge-ok" : "badge badge-warn"}>{video.subtitleStatus}</span>
+                            <span className={getPlaybackStatusClassName(video.playbackStatus)}>{video.playbackStatus}</span>
+                          </div>
                           {video.subtitlePath ? <code>{video.subtitlePath}</code> : <code>sub/ 下暂无同名字幕</code>}
                         </div>
 
@@ -1159,6 +1213,16 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("zh-CN", {
     hour12: false,
   });
+}
+
+function getPlaybackStatusClassName(status: VideoPlaybackStatus): string {
+  if (status === "已播放") {
+    return "badge badge-ok";
+  }
+  if (status === "播放过") {
+    return "badge badge-played";
+  }
+  return "badge badge-neutral";
 }
 
 function parseOffsetMilliseconds(input: string): number | null {

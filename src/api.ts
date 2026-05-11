@@ -8,6 +8,8 @@ import {
   DownloadSeedTorrentResponse,
   DownloadCandidateRequest,
   DownloadCandidateResponse,
+  FetchVideoPlaybackStatusesRequest,
+  FetchVideoPlaybackStatusesResponse,
   LogsResponse,
   MatchVideoRequest,
   MatchVideoResponse,
@@ -84,6 +86,15 @@ export function fetchLogs(): Promise<LogsResponse> {
 
 export function playVideo(body: PlayVideoRequest): Promise<PlayVideoResponse> {
   return request("/api/play-video", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchVideoPlaybackStatuses(
+  body: FetchVideoPlaybackStatusesRequest,
+): Promise<FetchVideoPlaybackStatusesResponse> {
+  return request("/api/video-playback-statuses", {
     method: "POST",
     body: JSON.stringify(body),
   });

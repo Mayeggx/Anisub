@@ -1,45 +1,44 @@
 # Anisub
 
-## Seed Download (Anisubroid Compatible)
+Anisub 是一个本地桌面工具（Web UI + 本地 API），用于：
 
-Anisub now includes a Seed Download page compatible with the Anisubroid seed-sync format.
+1. 字幕匹配与下载
+2. 单词摘记并写入 Anki
+3. 远程同步（Git）
+4. Seed 下载（兼容 Anisubroid 的订阅格式）
 
-- Sync file: `seed-subscriptions.json` at repository root.
-- Supported pull formats:
-  - `{ "entries": [{ "url": "..." }] }`
-  - `{ "urls": [{ "url": "..." }] }`
-  - JSON array of strings or objects with `url`.
-- Uses the same remote-sync repo/config base:
-  - `./.anisub/remote-sync/repo-a`
-  - `./.anisub/remote-sync/config.json`
-- Network robustness:
-  - request timeout + retry
-  - nyaa mirror fallback
-  - clearer error messages instead of generic `fetch failed`.
+## 最近更新（2026-05）
 
-UI update for subscription cards:
-- removed `Local status: Not downloaded`
-- removed `View Entries` button
-- subscription URL is highlighted and clickable (opens in a new tab).
+### 字幕页状态展示调整
 
-Anisub 是一个基于 TypeScript 的本地桌面工具（Web UI + 本地 API），目前包含三大核心功能：
+- 字幕状态文案统一为：`已匹配 / 未匹配`
+- 播放状态新增并持久化：`未播放 / 播放过 / 已播放`
+- “匹配状态 + 播放状态”在同一组紧凑展示，字幕路径仍在同一行右侧
 
-1. 字幕匹配：扫描视频目录并从字幕站点匹配下载字幕
-2. 单词摘记：加载截图，调用大模型生成词条并写入 Anki
-3. 远程同步：将本地素材按条目同步到远程 Git 仓库
+### mpv 播放状态监控
+
+- 点击播放后：
+  - 条目立即标记为 `播放过`（首次播放）
+  - 后端启动 mpv 并监听 IPC 事件
+- 当 mpv 触发 `end-file` 且 `reason=eof` 时，条目更新为 `已播放`
+- 前端会定时轮询后端状态，自动刷新列表
+
+说明：
+- 当前播放状态监控仅支持 `mpv`（播放器路径需指向 `mpv.exe`）
+- 播放状态持久化文件：`./.anisub/video-playback-status.json`
 
 ## 功能概览
 
 ### 1) 字幕匹配
 
-- 扫描本地视频文件夹
-- 支持 `Jimaku` / `EdaTribe` 两种字幕源
-- 支持 `auto`（自动下载）和 `candidate`（候选确认）两种模式
-- 支持“批量匹配未添加项”（自动模式，跳过已有字幕条目）
-- 支持单条/批量字幕时间偏移（毫秒）
-- 支持“匹配标记”
-- 支持查看匹配日志
-- 新增：批量匹配/批量偏移支持“中断批量任务”按钮，可中途打断
+- 扫描本地视频目录
+- 支持 `Jimaku` / `EdaTribe`
+- 支持 `auto`（自动下载）和 `candidate`（候选确认）
+- 支持批量匹配未添加项
+- 支持单条/批量字幕偏移（毫秒）
+- 支持匹配标记（matchTag）
+- 支持匹配日志查看
+- 批量任务支持中断
 
 ### 2) 单词摘记
 
@@ -47,45 +46,29 @@ Anisub 是一个基于 TypeScript 的本地桌面工具（Web UI + 本地 API）
 - 文件名（去扩展名）作为字幕句子
 - 每条可输入目标单词后创建 Anki 卡片
 - 支持勾选后批量添加
-- 已添加条目显示状态
-- 摘记结果写入 `./.anisub/word-note-log.md`
-- 支持一键打开配置文件与日志文件
+- 已添加状态可回显
+- 日志写入 `./.anisub/word-note-log.md`
 
 ### 3) 远程同步（Git）
 
-- 侧栏“远程同步”页面
-- 支持配置远程仓库、账号 Token、提交作者、图片压缩参数
-- 支持新建条目（绑定当前设备 + 本地文件夹）
-- 支持 `Pull`、`Push`、`清空`、`删除`、`刷新列表`
-- 支持 Git 操作日志查看与清空
-- `Push` 支持图片转 JPG 压缩与同名文件跳过
+- 配置远程仓库、账号 Token、提交作者、图片压缩参数
+- 支持 `Pull / Push / 清空 / 删除 / 刷新`
+- 支持 Git 日志查看与清空
+- Push 支持图片转 JPG 压缩与重名跳过
 
-#### 与 Anisubroid 对齐的兼容逻辑（已实现）
+### 4) Seed Download（Anisubroid Compatible）
 
-1. 远端清空联动：如果其他设备把“本机条目”清空，本机执行 `Pull` 后会自动清空：
-   - 本地绑定文件夹内容
-   - 本地仓库缓存中的该条目内容
-   - 并在列表中显示对应数量为 0
+- 同步文件：仓库根目录 `seed-subscriptions.json`
+- 支持多种 pull 格式：
+  - `{ "entries": [{ "url": "..." }] }`
+  - `{ "urls": [{ "url": "..." }] }`
+  - 字符串数组或对象数组（含 `url`）
+- 复用远程同步配置目录：
+  - `./.anisub/remote-sync/repo-a`
+  - `./.anisub/remote-sync/config.json`
+- 网络增强：超时、重试、nyaa mirror fallback、更明确错误信息
 
-2. 清空删除标记：
-   - 清空条目时会生成/更新 `deleted-files.json`（删除标记）
-   - 之后 `Push` 会跳过同名相对路径文件（避免被重新上传）
-   - 清空时不再删除 `entry.json` 元数据文件
-
-3. 元数据兼容：
-   - `entry.json` 读写 `clearedAt`
-   - 兼容已有旧数据（无 `clearedAt` 时按 0 处理）
-
-## 配置与日志
-
-首次启动后会自动创建：
-
-- `./.anisub/config.ini`
-- `./.anisub/word-card-log.json`
-- `./.anisub/word-note-log.md`
-- `./.anisub/remote-sync/`
-
-## 运行方式
+## 运行
 
 安装依赖：
 
@@ -114,12 +97,13 @@ npm start
 ## 目录结构
 
 - `src/`：前端页面
-- `server/`：本地 API、字幕匹配、摘记、远程同步
+- `server/`：本地 API、字幕匹配、摘记、远程同步、播放状态管理
 - `shared/`：前后端共享类型
 - `.anisub/`：运行时配置与日志
 
 ## 当前限制
 
-- 目录选择器与打开配置/日志目前仅支持 Windows
-- 远程同步依赖本机已安装并可调用 `git`
-- 字幕匹配仍为启发式策略，极端命名场景可能误匹配
+- 文件夹选择器与打开本地文件功能目前仅支持 Windows
+- 远程同步依赖本机可调用 `git`
+- 播放状态监控当前仅支持 `mpv`
+- 字幕匹配仍是启发式策略，极端命名场景下可能误匹配
