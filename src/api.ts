@@ -29,6 +29,10 @@ import {
   CreateRemoteSyncEntryRequest,
 } from "../shared/types";
 
+type RequestOptions = {
+  signal?: AbortSignal;
+};
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -74,10 +78,11 @@ export function playVideo(body: PlayVideoRequest): Promise<PlayVideoResponse> {
   });
 }
 
-export function matchVideo(body: MatchVideoRequest): Promise<MatchVideoResponse> {
+export function matchVideo(body: MatchVideoRequest, options?: RequestOptions): Promise<MatchVideoResponse> {
   return request("/api/match-video", {
     method: "POST",
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
 }
 
@@ -90,10 +95,11 @@ export function downloadCandidate(
   });
 }
 
-export function offsetSubtitle(body: OffsetSubtitleRequest): Promise<OffsetSubtitleResponse> {
+export function offsetSubtitle(body: OffsetSubtitleRequest, options?: RequestOptions): Promise<OffsetSubtitleResponse> {
   return request("/api/offset-subtitle", {
     method: "POST",
     body: JSON.stringify(body),
+    signal: options?.signal,
   });
 }
 

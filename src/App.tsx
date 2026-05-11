@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   createAnkiWordCard,
@@ -73,6 +73,9 @@ export function App() {
   const [subtitleOffsetMsInput, setSubtitleOffsetMsInput] = useState("0");
   const [offsettingPath, setOffsettingPath] = useState<string | null>(null);
   const [batchOffsetting, setBatchOffsetting] = useState(false);
+  const [batchCancelRequested, setBatchCancelRequested] = useState(false);
+  const batchCancelRequestedRef = useRef(false);
+  const batchAbortControllerRef = useRef<AbortController | null>(null);
 
   const [wordImageFolderPath, setWordImageFolderPath] = useState(
     () => localStorage.getItem(STORAGE_KEYS.wordImageFolderPath) ?? "",
@@ -342,6 +345,19 @@ export function App() {
     }
   }
 
+  function handleCancelBatchTask() {
+    if (!batchMatching && !batchOffsetting) {
+      return;
+    }
+    if (batchCancelRequestedRef.current) {
+      return;
+    }
+    batchCancelRequestedRef.current = true;
+    setBatchCancelRequested(true);
+    batchAbortControllerRef.current?.abort();
+    setMessage("正在中断批量任务，请稍候...");
+  }
+
   async function handleBatchMatchVideos() {
     if (unmatchedVideos.length === 0) {
       setMessage("所有条目都已有字幕，无需批量匹配。");
@@ -350,20 +366,29 @@ export function App() {
 
     try {
       setBatchMatching(true);
+      batchCancelRequestedRef.current = false;
+      setBatchCancelRequested(false);
       let successCount = 0;
       const failed: string[] = [];
+      let interrupted = false;
 
       for (let index = 0; index < unmatchedVideos.length; index += 1) {
+        if (batchCancelRequestedRef.current) {
+          interrupted = true;
+          break;
+        }
         const video = unmatchedVideos[index];
         setMatchingPath(video.fullPath);
         setMessage(`正在批量匹配 (${index + 1}/${unmatchedVideos.length})：${video.fileName}`);
         try {
+          const controller = new AbortController();
+          batchAbortControllerRef.current = controller;
           const payload = await matchVideo({
             videoPath: video.fullPath,
             source,
             mode: "auto",
             matchTag: matchTag.trim() || undefined,
-          });
+          }, { signal: controller.signal });
           if (payload.kind === "downloaded") {
             mergeVideo(payload.video);
             setLogs((current) => [payload.log, ...current].slice(0, 200));
@@ -372,9 +397,19 @@ export function App() {
             failed.push(video.fileName);
           }
         } catch (error) {
+          if (isAbortError(error) && batchCancelRequestedRef.current) {
+            interrupted = true;
+            break;
+          }
           const reason = error instanceof Error ? error.message : "未知错误";
           failed.push(`${video.fileName}（${reason}）`);
         }
+      }
+
+      if (interrupted) {
+        const done = successCount + failed.length;
+        setMessage(`批量匹配已中断：已处理 ${done}/${unmatchedVideos.length}，成功 ${successCount}。`);
+        return;
       }
 
       const skippedCount = videos.length - unmatchedVideos.length;
@@ -388,6 +423,9 @@ export function App() {
         setMessage(`批量匹配完成：成功 ${successCount}/${unmatchedVideos.length}，跳过已有字幕 ${skippedCount} 个。`);
       }
     } finally {
+      batchAbortControllerRef.current = null;
+      batchCancelRequestedRef.current = false;
+      setBatchCancelRequested(false);
       setMatchingPath(null);
       setBatchMatching(false);
     }
@@ -436,9 +474,16 @@ export function App() {
 
     try {
       setBatchOffsetting(true);
+      batchCancelRequestedRef.current = false;
+      setBatchCancelRequested(false);
       let successCount = 0;
       const failed: string[] = [];
+      let interrupted = false;
       for (let index = 0; index < videosWithSubtitle.length; index += 1) {
+        if (batchCancelRequestedRef.current) {
+          interrupted = true;
+          break;
+        }
         const video = videosWithSubtitle[index];
         if (!video.subtitlePath) {
           continue;
@@ -446,15 +491,30 @@ export function App() {
         setOffsettingPath(video.fullPath);
         setMessage(`正在批量偏移 (${index + 1}/${videosWithSubtitle.length})：${video.fileName}`);
         try {
-          await offsetSubtitle({
-            subtitlePath: video.subtitlePath,
-            offsetMs,
-          });
+          const controller = new AbortController();
+          batchAbortControllerRef.current = controller;
+          await offsetSubtitle(
+            {
+              subtitlePath: video.subtitlePath,
+              offsetMs,
+            },
+            { signal: controller.signal },
+          );
           successCount += 1;
         } catch (error) {
+          if (isAbortError(error) && batchCancelRequestedRef.current) {
+            interrupted = true;
+            break;
+          }
           const reason = error instanceof Error ? error.message : "未知错误";
           failed.push(`${video.fileName}（${reason}）`);
         }
+      }
+
+      if (interrupted) {
+        const done = successCount + failed.length;
+        setMessage(`批量偏移已中断：已处理 ${done}/${videosWithSubtitle.length}，成功 ${successCount}。`);
+        return;
       }
 
       if (failed.length > 0) {
@@ -465,6 +525,9 @@ export function App() {
         setMessage(`批量偏移完成：成功 ${successCount}/${videosWithSubtitle.length}。`);
       }
     } finally {
+      batchAbortControllerRef.current = null;
+      batchCancelRequestedRef.current = false;
+      setBatchCancelRequested(false);
       setOffsettingPath(null);
       setBatchOffsetting(false);
     }
@@ -714,6 +777,16 @@ export function App() {
                 >
                   {batchOffsetting ? "批量偏移中..." : `批量偏移字幕 (${videosWithSubtitle.length})`}
                 </button>
+                {batchMatching || batchOffsetting ? (
+                  <button
+                    className="action-button danger"
+                    type="button"
+                    onClick={handleCancelBatchTask}
+                    disabled={batchCancelRequested}
+                  >
+                    {batchCancelRequested ? "中断请求中..." : "中断批量任务"}
+                  </button>
+                ) : null}
                 <label className="compact-offset-field">
                   <span>偏移量（毫秒）</span>
                   <input
@@ -1087,6 +1160,16 @@ function parseOffsetMilliseconds(input: string): number | null {
     return null;
   }
   return Number.parseInt(value, 10);
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.name === "AbortError";
+  }
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  return "name" in error && (error as { name?: string }).name === "AbortError";
 }
 
 function sanitizeExampleHtml(value: string): string {

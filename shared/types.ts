@@ -237,6 +237,7 @@ export interface RemoteSyncEntry {
   deviceName: string;
   repoPath: string;
   updatedAt: number;
+  clearedAt: number;
   folderPath: string | null;
   folderLabel: string | null;
   folderFileCount: number | null;

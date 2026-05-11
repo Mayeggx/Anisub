@@ -25,6 +25,7 @@ const DEFAULT_REMOTE_URL = "https://gitee.com/mayeggx/pic4nisub.git";
 const DEFAULT_BRANCH = "main";
 const ENTRIES_DIR = "entries";
 const ENTRY_META_FILE = "entry.json";
+const DELETED_MARKERS_FILE = "deleted-files.json";
 const DEFAULT_IMAGE_SCALE_PERCENT = 50;
 const DEFAULT_IMAGE_JPEG_QUALITY = 70;
 
@@ -46,11 +47,18 @@ type RepoEntryMeta = {
   deviceName: string;
   repoPath: string;
   updatedAt: number;
+  clearedAt: number;
 };
 
 type DeviceInfo = {
   id: string;
   name: string;
+};
+
+type ClearSyncStats = {
+  clearedEntries: number;
+  clearedLocalFiles: number;
+  clearedRepoFiles: number;
 };
 
 type ImageCompressionSetting = {
@@ -158,9 +166,15 @@ export class RemoteSyncService {
   async pull(): Promise<RemoteSyncStateResponse> {
     return this.runTask("Pull", async () => {
       const config = await this.store.loadConfig();
+      const localBindings = await this.store.loadBindings();
       await this.gitService.pull(config, (line) => this.appendGitLog(line));
+      const remoteEntries = await this.gitService.scanRemoteEntries();
+      const clearSync = await this.syncRemoteClearsAfterPull(localBindings, remoteEntries);
       await this.refreshEntryListInternal();
       const headSummary = await this.appendHeadSummary(config);
+      if (clearSync.clearedEntries > 0) {
+        return `Pull completed. Cleared ${clearSync.clearedEntries} entries (local ${clearSync.clearedLocalFiles} files, repo cache ${clearSync.clearedRepoFiles} files). ${headSummary}`;
+      }
       return `Pull 完成。${headSummary}`;
     });
   }
@@ -203,6 +217,7 @@ export class RemoteSyncService {
           deviceName: entry.deviceName,
           repoPath: entry.repoPath,
           updatedAt: entry.updatedAt,
+          clearedAt: entry.clearedAt,
         },
         (line) => this.appendGitLog(line),
       );
@@ -315,6 +330,54 @@ export class RemoteSyncService {
       }
     }
     return mergeEntries(localBindings, remoteEntries, folderFileCounts, this.gitService.repoDir);
+  }
+
+  private async syncRemoteClearsAfterPull(
+    localBindings: EntryBinding[],
+    remoteEntries: RepoEntryMeta[],
+  ): Promise<ClearSyncStats> {
+    const remoteById = new Map(remoteEntries.map((item) => [item.id, item]));
+    let clearedEntries = 0;
+    let clearedLocalFiles = 0;
+    let clearedRepoFiles = 0;
+
+    for (const binding of localBindings) {
+      if (binding.deviceId !== this.deviceInfo.id) {
+        continue;
+      }
+      const remote = remoteById.get(binding.id);
+      if (!remote || remote.clearedAt <= 0) {
+        continue;
+      }
+
+      this.appendGitLog(`妫€娴嬪埌杩滅宸叉竻绌猴紝寮€濮嬪悓姝ユ湰鍦帮細${binding.displayName}`);
+
+      let localDeleted = 0;
+      if (binding.folderPath.trim()) {
+        const localCount = await countFilesInDirectory(binding.folderPath);
+        if ((localCount ?? 0) > 0) {
+          try {
+            localDeleted = await clearFolderContents(binding.folderPath);
+          } catch (error) {
+            this.appendGitLog(`娓呯┖鏈湴缁戝畾澶辫触锛?{binding.displayName} - ${toErrorMessage(error)}`);
+          }
+        }
+      }
+
+      const repoDeleted = await this.gitService.clearLocalEntryCache(remote.repoPath, (line) => this.appendGitLog(line));
+
+      if (localDeleted > 0 || repoDeleted > 0) {
+        clearedEntries += 1;
+        clearedLocalFiles += localDeleted;
+        clearedRepoFiles += repoDeleted;
+      }
+    }
+
+    return {
+      clearedEntries,
+      clearedLocalFiles,
+      clearedRepoFiles,
+    };
   }
 
   private async requirePushableBinding(entryId: string): Promise<EntryBinding> {
@@ -440,10 +503,14 @@ class RemoteSyncGitService {
       throw new AppError("非法仓库路径。", 400);
     }
     logger(`复制目录: ${entry.folderPath} -> ${targetDir}`);
+    const deletedMarkers = await readDeletedMarkers(targetDir);
+    if (deletedMarkers.size > 0) {
+      logger(`Detected ${deletedMarkers.size} deleted markers, same-path files will be skipped.`);
+    }
     const stats = await copyFolderTree(entry.folderPath, targetDir, {
       scalePercent: config.imageScalePercent,
       jpegQuality: config.imageJpegQuality,
-    });
+    }, deletedMarkers);
     logger(`复制完成: copied=${stats.copiedFiles}, compressed=${stats.compressedImages}, skipped=${stats.skippedFiles}`);
 
     await this.writeEntryMetadata(targetDir, {
@@ -453,6 +520,7 @@ class RemoteSyncGitService {
       deviceName: entry.deviceName,
       repoPath: entry.repoPath,
       updatedAt: Date.now(),
+      clearedAt: 0,
     });
     logger(`写入元数据: ${entry.repoPath}/${ENTRY_META_FILE}`);
 
@@ -472,11 +540,20 @@ class RemoteSyncGitService {
     if (!targetDir) {
       throw new AppError("非法仓库路径。", 400);
     }
-    await clearDirectoryContents(targetDir);
+    const deletedMarkers = await collectPayloadRelativePaths(targetDir);
+    if (deletedMarkers.size > 0) {
+      const mergedMarkers = new Set([...(await readDeletedMarkers(targetDir)), ...deletedMarkers]);
+      await writeDeletedMarkers(targetDir, mergedMarkers);
+      logger(`Recorded ${deletedMarkers.size} deleted markers, total ${mergedMarkers.size}.`);
+    } else if (!(await exists(path.join(targetDir, DELETED_MARKERS_FILE)))) {
+      await writeDeletedMarkers(targetDir, new Set());
+    }
+    await clearDirectoryContents(targetDir, new Set([ENTRY_META_FILE, DELETED_MARKERS_FILE]));
     logger(`已清空仓库目录: ${targetDir}`);
     await this.writeEntryMetadata(targetDir, {
       ...entry,
       updatedAt: Date.now(),
+      clearedAt: Date.now(),
     });
     logger(`重写元数据: ${entry.repoPath}/${ENTRY_META_FILE}`);
     await this.commitAndPushIfNeeded(
@@ -531,12 +608,25 @@ class RemoteSyncGitService {
           deviceName: String(parsed.deviceName ?? ""),
           repoPath: String(parsed.repoPath),
           updatedAt: Number.isFinite(parsed.updatedAt) ? Number(parsed.updatedAt) : Date.now(),
+          clearedAt: Number.isFinite(parsed.clearedAt) ? Number(parsed.clearedAt) : 0,
         });
       } catch {
         continue;
       }
     }
     return results;
+  }
+
+  async clearLocalEntryCache(repoPathValue: string, logger: (line: string) => void): Promise<number> {
+    const targetDir = resolveRepoEntryDirectory(this.repoDir, repoPathValue);
+    if (!targetDir) {
+      return 0;
+    }
+    const deleted = await clearDirectoryContents(targetDir, new Set([ENTRY_META_FILE, DELETED_MARKERS_FILE]));
+    if (deleted > 0) {
+      logger(`Cleared local repo cache: ${repoPathValue} (deleted ${deleted} files)`);
+    }
+    return deleted;
   }
 
   private async openOrCreateRepository(config: RemoteSyncConfig, logger: (line: string) => void): Promise<void> {
@@ -817,6 +907,7 @@ function mergeEntries(
       deviceName: remote.deviceName,
       repoPath: remote.repoPath,
       updatedAt: Math.max(remote.updatedAt, local?.updatedAt ?? 0),
+      clearedAt: remote.clearedAt,
       folderPath,
       folderLabel: local?.folderLabel ?? null,
       folderFileCount: folderFileCounts.get(remote.id) ?? null,
@@ -835,6 +926,7 @@ function mergeEntries(
       deviceName: local.deviceName,
       repoPath: local.repoPath,
       updatedAt: local.updatedAt,
+      clearedAt: 0,
       folderPath: local.folderPath,
       folderLabel: local.folderLabel,
       folderFileCount: folderFileCounts.get(local.id) ?? null,
@@ -881,7 +973,9 @@ async function countFilesInRepoEntryDirectory(repoRootDir: string, repoPathValue
     return null;
   }
   const files = await walkFiles(entryDir);
-  return files.filter((filePath) => path.basename(filePath) !== ENTRY_META_FILE).length;
+  return files
+    .map((filePath) => normalizeDeletedMarkerPath(path.relative(entryDir, filePath)))
+    .filter((relativePath) => relativePath && !isSpecialRepoFile(relativePath)).length;
 }
 
 function resolveWordNoteFolderPath(repoPathValue: string, repoRootPath: string): string | null {
@@ -924,13 +1018,21 @@ async function clearFolderContents(folderPath: string): Promise<number> {
   return deleteChildren(resolved);
 }
 
-async function clearDirectoryContents(directoryPath: string): Promise<void> {
+async function clearDirectoryContents(
+  directoryPath: string,
+  preservedRootFiles: ReadonlySet<string> = new Set(),
+): Promise<number> {
   await mkdir(directoryPath, { recursive: true });
   const children = await readdir(directoryPath, { withFileTypes: true }).catch(() => [] as Dirent[]);
+  let deletedFileCount = 0;
   for (const child of children) {
+    if (child.isFile() && preservedRootFiles.has(child.name)) {
+      continue;
+    }
     const childPath = path.join(directoryPath, child.name);
-    await rm(childPath, { recursive: true, force: true });
+    deletedFileCount += await deleteRecursivelyAndCountFiles(childPath);
   }
+  return deletedFileCount;
 }
 
 async function deleteChildren(directoryPath: string): Promise<number> {
@@ -949,23 +1051,48 @@ async function deleteChildren(directoryPath: string): Promise<number> {
   return deletedFileCount;
 }
 
+async function deleteRecursivelyAndCountFiles(targetPath: string): Promise<number> {
+  const targetStat = await stat(targetPath).catch(() => null);
+  if (!targetStat) {
+    return 0;
+  }
+  if (targetStat.isFile()) {
+    await unlink(targetPath);
+    return 1;
+  }
+  if (!targetStat.isDirectory()) {
+    await rm(targetPath, { recursive: true, force: true });
+    return 0;
+  }
+  const children = await readdir(targetPath, { withFileTypes: true }).catch(() => [] as Dirent[]);
+  let deletedFiles = 0;
+  for (const child of children) {
+    deletedFiles += await deleteRecursivelyAndCountFiles(path.join(targetPath, child.name));
+  }
+  await rm(targetPath, { recursive: false, force: false });
+  return deletedFiles;
+}
+
 async function copyFolderTree(
   sourceFolderPath: string,
   destinationDir: string,
   setting: ImageCompressionSetting,
+  deletedMarkers: ReadonlySet<string> = new Set(),
 ): Promise<CopyStats> {
   const sourceRoot = path.resolve(sourceFolderPath);
   const sourceStat = await stat(sourceRoot).catch(() => null);
   if (!sourceStat?.isDirectory()) {
     throw new AppError("无法访问所选文件夹。", 400);
   }
-  return copyDirectoryChildren(sourceRoot, destinationDir, setting);
+  return copyDirectoryChildren(sourceRoot, destinationDir, destinationDir, setting, deletedMarkers);
 }
 
 async function copyDirectoryChildren(
   sourceDir: string,
+  entryRootDir: string,
   destinationDir: string,
   setting: ImageCompressionSetting,
+  deletedMarkers: ReadonlySet<string>,
 ): Promise<CopyStats> {
   await mkdir(destinationDir, { recursive: true });
   const children = await readdir(sourceDir, { withFileTypes: true });
@@ -980,27 +1107,37 @@ async function copyDirectoryChildren(
     const sourcePath = path.join(sourceDir, child.name);
     const targetPath = path.join(destinationDir, child.name);
     if (child.isDirectory()) {
-      const subStats = await copyDirectoryChildren(sourcePath, targetPath, setting);
+      const subStats = await copyDirectoryChildren(sourcePath, entryRootDir, targetPath, setting, deletedMarkers);
       stats = sumCopyStats(stats, subStats);
       continue;
     }
     if (!child.isFile()) {
       continue;
     }
-    const fileStats = await copySingleFile(sourcePath, targetPath, setting);
+    const fileStats = await copySingleFile(sourcePath, targetPath, entryRootDir, setting, deletedMarkers);
     stats = sumCopyStats(stats, fileStats);
   }
 
   return stats;
 }
 
-async function copySingleFile(sourcePath: string, targetPath: string, setting: ImageCompressionSetting): Promise<CopyStats> {
+async function copySingleFile(
+  sourcePath: string,
+  targetPath: string,
+  entryRootDir: string,
+  setting: ImageCompressionSetting,
+  deletedMarkers: ReadonlySet<string>,
+): Promise<CopyStats> {
   const shouldCompress = shouldCompressImage(sourcePath);
   const targetFilePath = shouldCompress
     ? path.join(path.dirname(targetPath), buildCompressedImageName(path.basename(targetPath)))
     : targetPath;
 
   await mkdir(path.dirname(targetFilePath), { recursive: true });
+
+  if (isMarkedDeleted(entryRootDir, targetFilePath, deletedMarkers)) {
+    return { copiedFiles: 0, compressedImages: 0, skippedFiles: 1 };
+  }
 
   if (await exists(targetFilePath)) {
     return { copiedFiles: 0, compressedImages: 0, skippedFiles: 1 };
@@ -1020,6 +1157,90 @@ async function copySingleFile(sourcePath: string, targetPath: string, setting: I
   await mkdir(path.dirname(targetPath), { recursive: true });
   await copyFile(sourcePath, targetPath);
   return { copiedFiles: 1, compressedImages: 0, skippedFiles: 0 };
+}
+
+async function collectPayloadRelativePaths(entryDir: string): Promise<Set<string>> {
+  const entryStat = await stat(entryDir).catch(() => null);
+  if (!entryStat?.isDirectory()) {
+    return new Set();
+  }
+  const files = await walkFiles(entryDir);
+  const paths = new Set<string>();
+  for (const filePath of files) {
+    const relativePath = normalizeDeletedMarkerPath(path.relative(entryDir, filePath));
+    if (!relativePath || isSpecialRepoFile(relativePath)) {
+      continue;
+    }
+    paths.add(relativePath);
+  }
+  return paths;
+}
+
+function isSpecialRepoFile(relativePath: string): boolean {
+  const normalized = normalizeDeletedMarkerPath(relativePath);
+  return (
+    normalized === normalizeDeletedMarkerPath(ENTRY_META_FILE) ||
+    normalized === normalizeDeletedMarkerPath(DELETED_MARKERS_FILE)
+  );
+}
+
+async function readDeletedMarkers(entryDir: string): Promise<Set<string>> {
+  const markerPath = path.join(entryDir, DELETED_MARKERS_FILE);
+  const raw = await readFile(markerPath, "utf-8").catch(() => "");
+  if (!raw.trim()) {
+    return new Set();
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const sourcePaths = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object" && Array.isArray((parsed as { paths?: unknown }).paths)
+        ? (parsed as { paths: unknown[] }).paths
+        : [];
+    const markers = new Set<string>();
+    for (const item of sourcePaths) {
+      if (typeof item !== "string") {
+        continue;
+      }
+      const normalized = normalizeDeletedMarkerPath(item);
+      if (normalized) {
+        markers.add(normalized);
+      }
+    }
+    return markers;
+  } catch {
+    return new Set();
+  }
+}
+
+async function writeDeletedMarkers(entryDir: string, markers: Iterable<string>): Promise<void> {
+  await mkdir(entryDir, { recursive: true });
+  const markerPath = path.join(entryDir, DELETED_MARKERS_FILE);
+  const normalized = [...markers]
+    .map((value) => normalizeDeletedMarkerPath(value))
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  const unique = [...new Set(normalized)];
+  const payload = {
+    paths: unique,
+    updatedAt: Date.now(),
+  };
+  await writeFile(markerPath, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
+}
+
+function normalizeDeletedMarkerPath(rawPath: string): string {
+  return rawPath.replace(/\\/g, "/").trim().replace(/^\/+|\/+$/g, "").toLowerCase();
+}
+
+function isMarkedDeleted(entryRootDir: string, targetPath: string, deletedMarkers: ReadonlySet<string>): boolean {
+  if (deletedMarkers.size === 0) {
+    return false;
+  }
+  const relativePath = normalizeDeletedMarkerPath(path.relative(entryRootDir, targetPath));
+  if (!relativePath) {
+    return false;
+  }
+  return deletedMarkers.has(relativePath);
 }
 
 function shouldCompressImage(filePath: string): boolean {
